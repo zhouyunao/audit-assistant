@@ -10,7 +10,7 @@ LLM 辅助的多语言代码安全审计 VSCode 扩展。面向"整个项目"的
 | 当前文件分析：功能总结、逐函数说明、漏洞初筛、注意点高亮 | ✅ M3 已完成 |
 | 审计数据保存在 `.audit/`，团队共享 | ✅ 已完成（文件分析、结构图部分） |
 | 项目结构树（目录树 + 模块职责 + 依赖关系） | ✅ M4 已完成 |
-| source/sink 规则扫描、手动标记 | ⏳ M5 计划中（数据格式与展示视图已就绪） |
+| source/sink 规则扫描、手动标记 | ✅ M5 已完成 |
 | 调用链确认（LLM agent 逐跳取证） | ⏳ M6 计划中（数据格式与展示视图已就绪） |
 | 汇总报告导出 | ⏳ M7 计划中 |
 
@@ -38,9 +38,9 @@ npm run build      # 拷贝 wasm + 打包 dist/extension.js
 
 1. 打开被审计项目，运行 **`Audit: 索引整个项目`**（可选但推荐；结果缓存，二次打开免重扫）。
 2. 运行 **`Audit: 生成项目结构树`**：生成带注释的目录树——每个模块目录标注文件数、LLM 推断的职责、依赖去向（基于 import 关系与跨文件调用聚合；未配置 LLM 也能出树，只是没有职责文字）。结果写入 `.audit/architecture.md` 并自动打开 Markdown 预览。之后用 **`Audit: 查看项目结构树`** 直接打开。
-3. 打开任意代码文件，运行 **`Audit: 分析当前文件`**（命令面板 / 编辑器右键 / 侧边栏按钮）。
-3. 左侧 Audit Assistant 面板查看：文件功能总结、逐函数一句话说明（点击跳转）、疑似漏洞（严重度/置信度/理由/建议）、需人工注意的代码段；编辑器内相应行有高亮和 hover 详情。
-4. 结果自动写入项目根的 `.audit/` 目录。**把 `.audit/` 提交进 git（或直接拷给同事）即可共享**——同事打开同一文件时直接看到已有分析；代码改动后会显示"分析结果可能过期"。
+3. 打开任意代码文件，运行 **`Audit: 分析当前文件`**（命令面板 / 编辑器右键 / 侧边栏按钮）。左侧 Audit Assistant 面板查看：文件功能总结、逐函数一句话说明（点击跳转）、疑似漏洞（严重度/置信度/理由/建议）、需人工注意的代码段；编辑器内相应行有高亮和 hover 详情。
+4. **Source/Sink**：运行 **`Audit: 扫描 Source/Sink 候选`**，内置多语言规则库（命令执行、SQL、eval、反序列化、XSS、HTTP 入参、环境变量等）扫出候选，列在「Source / Sink」视图（按 Sink/Source 分组，已确认→候选→已排除 排序）。对候选行的 CodeLens 点「确认/排除」，或在编辑器右键 **`标记为 Source/Sink`** 手动标记（人工标记不会被重扫清除）；已标记行在编辑器左侧有颜色标示。标记存入 `.audit/marks.json`。
+5. 结果自动写入项目根的 `.audit/` 目录。**把 `.audit/` 提交进 git（或直接拷给同事）即可共享**——同事打开同一文件时直接看到已有分析与标记；代码改动后会显示"分析结果可能过期"。
 
 ## `.audit/` 目录格式
 
@@ -50,7 +50,7 @@ npm run build      # 拷贝 wasm + 打包 dist/extension.js
 ├── architecture.md     # 结构树 + 模块职责 + 模块依赖（人读/git 共享）
 ├── architecture.json   # 结构数据（程序复用）
 ├── files/<hash>.json   # 每文件分析：summary / functions / issues / attention（含 contentHash 与审计人）
-├── marks.json          # source/sink 标记（M5 起写入；已有数据会在侧边栏展示）
+├── marks.json          # source/sink 标记（含 kind/status/origin/category/cwe/作者）
 ├── findings/<id>.json  # 调用链结论（M6 起写入；已有数据会在侧边栏展示）
 └── report.md           # 汇总报告（M7）
 ```
@@ -59,10 +59,47 @@ npm run build      # 拷贝 wasm + 打包 dist/extension.js
 
 ## 开发
 
+前置：Node.js ≥ 18（开发用 v22 验证过）、npm。首次克隆后先 `npm install`。
+
+### npm 脚本
+
+| 命令 | 作用 |
+| --- | --- |
+| `npm run copy-wasm` | 把 tree-sitter 运行时和各语言 grammar 的 `.wasm` 从 `node_modules` 拷到 `grammars/`（`build`/`test` 会自动先跑它） |
+| `npm run build` | `copy-wasm` + esbuild 打包 → `dist/extension.js`（扩展的运行入口） |
+| `npm run watch` | esbuild 监听模式，改动源码自动重新打包（配合调试宿主） |
+| `npm run typecheck` | `tsc --noEmit`，只做类型检查、不产出文件 |
+| `npm run compile-test` | 按 `tsconfig.test.json` 把 `src/` 中不依赖 vscode 的模块编译到 `out/`（供 node 测试 require） |
+| `npm run test` | `copy-wasm` + `compile-test` + 跑 `test/*.test.cjs`（node:test，无需 VSCode）+ 打包冒烟测试 |
+| `npm run vscode:prepublish` | 打 vsix 前自动触发的生产模式打包（`build -- --production`，压缩、不出 sourcemap） |
+
+### 编译 / 调试流程
+
 ```bash
-npm run typecheck   # tsc --noEmit
-npm run test        # 索引层/工具函数单元测试（node:test，无需 VSCode）
-npm run watch       # esbuild watch
+# 1. 安装依赖
+npm install
+
+# 2. 打包扩展（生成 dist/extension.js，并把 wasm 拷到 grammars/）
+npm run build
+
+# 3. 在 VSCode 中按 F5 启动 Extension Development Host 调试
+#    改代码时可另开一个终端跑 npm run watch，保存后在宿主窗口 Reload Window 生效
+
+# 4. 提交前自检：类型 + 测试
+npm run typecheck
+npm run test
 ```
 
-代码结构见 `src/`：`indexer/`（tree-sitter 多语言解析、符号表、近似调用图、缓存）、`llm/`（OpenAI 兼容客户端）、`features/`（分析编排）、`store/`（.audit 读写）、`views/`（侧边栏与编辑器装饰）。
+> 说明：`dist/`、`out/`、`grammars/` 均为生成物（已在 `.gitignore`），克隆后需先 `npm run build` 才能 F5 调试；`out/` 只在 `npm run test` 时按需生成。
+
+### 打包分发
+
+```bash
+npx @vscode/vsce package    # 生成 audit-assistant-<version>.vsix
+```
+
+`vsce package` 会自动触发 `vscode:prepublish`（生产模式重新打包）。团队成员通过 VSCode「Extensions: Install from VSIX…」安装。
+
+### 代码结构
+
+`src/` 下：`indexer/`（tree-sitter 多语言解析、符号表、近似调用图、缓存）、`llm/`（OpenAI 兼容客户端）、`features/`（`fileAnalysis` 文件分析、`architecture` 结构树、`taint/` source/sink 规则与扫描）、`store/`（`.audit/` 读写）、`views/`（侧边栏 TreeView、CodeLens、编辑器装饰）、`extension.ts`（激活入口，注册命令/视图/事件）。

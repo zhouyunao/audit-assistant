@@ -117,12 +117,17 @@ export interface Mark {
   id: string;
   kind: 'source' | 'sink';
   status: 'candidate' | 'confirmed' | 'excluded';
+  /** 候选来自规则扫描，manual 为人工标记（人工标记不会被重扫清除） */
+  origin: 'scan' | 'manual';
   file: string;
   symbol?: string;
   /** 1-based */
   line: number;
+  /** 命中的调用名或文本（供人快速识别） */
+  anchor?: string;
   category?: string;
   cwe?: string;
+  ruleId?: string;
   note?: string;
   author: string;
   time: string;

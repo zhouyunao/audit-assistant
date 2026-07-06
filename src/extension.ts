@@ -10,9 +10,15 @@ import { LANGUAGES } from './indexer/languages';
 import { AuditStore } from './store/auditStore';
 import { analyzeFileContent } from './features/fileAnalysis';
 import { generateArchitecture } from './features/architecture';
+import { TAINT_RULES } from './features/taint/rules';
+import { compileRules, scanFile, mergeCandidates } from './features/taint/candidates';
+import { applyManualMark, symbolAt } from './features/taint/marks';
 import { FileAnalysisTreeProvider } from './views/fileAnalysisTree';
 import { AnalysisDecorations } from './views/decorations';
-import { FindingsTreeProvider, SourceSinkTreeProvider } from './views/placeholderTrees';
+import { SourceSinkTreeProvider } from './views/sourceSinkTree';
+import { MarkCodeLensProvider } from './views/markCodeLens';
+import { MarkDecorations } from './views/markDecorations';
+import { FindingsTreeProvider } from './views/placeholderTrees';
 
 let indexCache: IndexCache | undefined;
 let projectIndex: ProjectIndex | undefined;
@@ -40,18 +46,92 @@ export function activate(context: vscode.ExtensionContext): void {
   indexCache = new IndexCache(path.join(context.globalStorageUri.fsPath, `index-${wsKey}.json`));
   index.restore(indexCache.load());
 
+  const relPathOf = (uri: vscode.Uri) => vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+
   const analysisTree = new FileAnalysisTreeProvider();
   const sourceSinkTree = new SourceSinkTreeProvider(store);
   const findingsTree = new FindingsTreeProvider(store);
   const decorations = new AnalysisDecorations();
+  const markDecorations = new MarkDecorations();
+  const markCodeLens = new MarkCodeLensProvider(store, relPathOf);
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('auditFileAnalysis', analysisTree),
     vscode.window.registerTreeDataProvider('auditSourceSink', sourceSinkTree),
     vscode.window.registerTreeDataProvider('auditFindings', findingsTree),
+    vscode.languages.registerCodeLensProvider({ scheme: 'file' }, markCodeLens),
     decorations,
+    markDecorations,
   );
 
-  const relPathOf = (uri: vscode.Uri) => vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+  /** 把当前文件的 source/sink 标记画到编辑器上 */
+  const showMarksFor = (editor: vscode.TextEditor | undefined) => {
+    if (!editor || editor.document.uri.scheme !== 'file') {
+      return;
+    }
+    const rel = relPathOf(editor.document.uri);
+    markDecorations.apply(editor, store.loadMarks().filter((m) => m.file === rel));
+  };
+
+  /** 标记数据变化后统一刷新：视图、CodeLens、当前编辑器装饰 */
+  const refreshMarks = () => {
+    sourceSinkTree.refresh();
+    markCodeLens.refresh();
+    showMarksFor(vscode.window.activeTextEditor);
+  };
+
+  /** 命令参数可能是标记 id 字符串，或 TreeView item（带 markId） */
+  const resolveMarkId = (arg: unknown): string | undefined => {
+    if (typeof arg === 'string') {
+      return arg;
+    }
+    if (arg && typeof (arg as { markId?: unknown }).markId === 'string') {
+      return (arg as { markId: string }).markId;
+    }
+    return undefined;
+  };
+
+  const setMarkStatus = (arg: unknown, status: 'confirmed' | 'excluded' | 'candidate') => {
+    const id = resolveMarkId(arg);
+    if (!id) {
+      return;
+    }
+    const mark = store.loadMarks().find((m) => m.id === id);
+    if (!mark) {
+      return;
+    }
+    if (status === 'confirmed') {
+      mark.author = getSettings().author;
+      mark.time = new Date().toISOString();
+    }
+    mark.status = status;
+    store.upsertMark(mark);
+    refreshMarks();
+  };
+
+  const markSelection = async (kind: 'source' | 'sink') => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.uri.scheme !== 'file') {
+      vscode.window.showWarningMessage('Audit: 请先在代码文件中选中要标记的行');
+      return;
+    }
+    const rel = relPathOf(editor.document.uri);
+    const line0 = editor.selection.active.line;
+    // 尽量用已索引的符号；未索引则即时索引一次
+    let fileIndex = index.getFile(rel);
+    if (!fileIndex) {
+      fileIndex = await index.indexFile(rel, editor.document.getText());
+    }
+    const sym = symbolAt(fileIndex?.symbols, line0);
+    const anchor = editor.document.lineAt(line0).text.trim().slice(0, 40);
+    const mark = applyManualMark(
+      store.loadMarks(),
+      { kind, file: rel, line: line0 + 1, symbol: sym?.name, anchor, author: getSettings().author },
+      new Date().toISOString(),
+    );
+    store.upsertMark(mark);
+    refreshMarks();
+    vscode.window.showInformationMessage(`Audit: 已标记 ${kind === 'sink' ? 'Sink' : 'Source'} — ${rel}:${line0 + 1}`);
+  };
 
   /** 展示某编辑器对应文件的已有分析（含过期判断） */
   const showAnalysisFor = (editor: vscode.TextEditor | undefined) => {
@@ -78,7 +158,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('auditAssistant.refreshAnalysisView', () => {
       showAnalysisFor(vscode.window.activeTextEditor);
-      sourceSinkTree.refresh();
+      refreshMarks();
       findingsTree.refresh();
     }),
 
@@ -198,6 +278,66 @@ export function activate(context: vscode.ExtensionContext): void {
       await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(path.join(store.root, 'architecture.md')));
     }),
 
+    vscode.commands.registerCommand('auditAssistant.scanTaint', async () => {
+      if (index.stats.files === 0) {
+        await vscode.commands.executeCommand('auditAssistant.indexWorkspace');
+      }
+      if (index.stats.files === 0) {
+        vscode.window.showWarningMessage('Audit: 索引为空，无法扫描 source/sink');
+        return;
+      }
+      const compiled = compileRules(TAINT_RULES);
+      const now = new Date().toISOString();
+      const candidates = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'Audit: 扫描 Source/Sink 候选', cancellable: true },
+        async (progress, token) => {
+          const files = index.allFiles();
+          const found: import('./types').Mark[] = [];
+          let done = 0;
+          for (const fi of files) {
+            if (token.isCancellationRequested) {
+              break;
+            }
+            try {
+              const uri = vscode.Uri.file(path.join(workspaceRoot, fi.file));
+              const bytes = await vscode.workspace.fs.readFile(uri);
+              const lines = Buffer.from(bytes).toString('utf8').split(/\r?\n/);
+              found.push(...scanFile({ file: fi.file, languageId: fi.languageId, lines, calls: fi.calls, symbols: fi.symbols }, compiled, now));
+            } catch (e) {
+              output.appendLine(`[taint] ${fi.file} 扫描失败: ${e}`);
+            }
+            done++;
+            if (done % 25 === 0 || done === files.length) {
+              progress.report({ message: `${done}/${files.length}`, increment: (25 / files.length) * 100 });
+            }
+          }
+          return found;
+        },
+      );
+      const merged = mergeCandidates(store.loadMarks(), candidates);
+      store.saveMarks(merged);
+      refreshMarks();
+      const newCandidates = candidates.filter((c) => merged.some((m) => m.id === c.id && m.status === 'candidate')).length;
+      vscode.window.showInformationMessage(
+        `Audit: 扫描完成 — 命中 ${candidates.length} 个候选（当前候选 ${newCandidates} 个待复核）。可在编辑器右键或 CodeLens 上确认/排除。`,
+      );
+      vscode.commands.executeCommand('auditSourceSink.focus');
+    }),
+
+    vscode.commands.registerCommand('auditAssistant.markAsSource', () => markSelection('source')),
+    vscode.commands.registerCommand('auditAssistant.markAsSink', () => markSelection('sink')),
+    vscode.commands.registerCommand('auditAssistant.confirmMark', (arg) => setMarkStatus(arg, 'confirmed')),
+    vscode.commands.registerCommand('auditAssistant.excludeMark', (arg) => setMarkStatus(arg, 'excluded')),
+    vscode.commands.registerCommand('auditAssistant.restoreMark', (arg) => setMarkStatus(arg, 'candidate')),
+    vscode.commands.registerCommand('auditAssistant.deleteMark', (arg) => {
+      const id = resolveMarkId(arg);
+      if (id) {
+        store.deleteMark(id);
+        refreshMarks();
+      }
+    }),
+    vscode.commands.registerCommand('auditAssistant.refreshSourceSink', () => refreshMarks()),
+
     vscode.commands.registerCommand('auditAssistant.indexWorkspace', async () => {
       const settings = getSettings();
       const extensions = LANGUAGES.flatMap((l) => l.extensions.map((e) => e.slice(1)));
@@ -246,7 +386,10 @@ export function activate(context: vscode.ExtensionContext): void {
   // ---------- 事件 ----------
 
   context.subscriptions.push(
-    vscode.window.onDidChangeActiveTextEditor(showAnalysisFor),
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      showAnalysisFor(editor);
+      showMarksFor(editor);
+    }),
     vscode.workspace.onDidSaveTextDocument(async (doc) => {
       if (doc.uri.scheme === 'file' && isSupportedFile(doc.uri.fsPath)) {
         await index.indexFile(relPathOf(doc.uri), doc.getText());
@@ -254,11 +397,13 @@ export function activate(context: vscode.ExtensionContext): void {
       const editor = vscode.window.activeTextEditor;
       if (editor?.document === doc) {
         showAnalysisFor(editor);
+        showMarksFor(editor);
       }
     }),
   );
 
   showAnalysisFor(vscode.window.activeTextEditor);
+  showMarksFor(vscode.window.activeTextEditor);
 }
 
 export function deactivate(): void {

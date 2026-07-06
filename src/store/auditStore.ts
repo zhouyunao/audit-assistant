@@ -96,6 +96,10 @@ export class AuditStore {
     this.saveMarks(marks);
   }
 
+  deleteMark(id: string): void {
+    this.saveMarks(this.loadMarks().filter((m) => m.id !== id));
+  }
+
   // ---------- 调用链结论 ----------
 
   loadFindings(): Finding[] {

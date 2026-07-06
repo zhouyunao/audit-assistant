@@ -96,6 +96,52 @@
         "command": "auditAssistant.openIndexCache",
         "title": "打开索引缓存位置",
         "category": "Audit"
+      },
+      {
+        "command": "auditAssistant.scanTaint",
+        "title": "扫描 Source/Sink 候选",
+        "category": "Audit",
+        "icon": "$(search)"
+      },
+      {
+        "command": "auditAssistant.markAsSource",
+        "title": "标记为 Source",
+        "category": "Audit"
+      },
+      {
+        "command": "auditAssistant.markAsSink",
+        "title": "标记为 Sink",
+        "category": "Audit"
+      },
+      {
+        "command": "auditAssistant.confirmMark",
+        "title": "确认标记",
+        "category": "Audit",
+        "icon": "$(check)"
+      },
+      {
+        "command": "auditAssistant.excludeMark",
+        "title": "排除标记",
+        "category": "Audit",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "auditAssistant.restoreMark",
+        "title": "恢复为候选",
+        "category": "Audit",
+        "icon": "$(history)"
+      },
+      {
+        "command": "auditAssistant.deleteMark",
+        "title": "删除标记",
+        "category": "Audit",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "auditAssistant.refreshSourceSink",
+        "title": "刷新",
+        "category": "Audit",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -103,6 +149,16 @@
         {
           "command": "auditAssistant.analyzeCurrentFile",
           "group": "auditAssistant@1"
+        },
+        {
+          "command": "auditAssistant.markAsSource",
+          "when": "editorTextFocus",
+          "group": "auditAssistant@2"
+        },
+        {
+          "command": "auditAssistant.markAsSink",
+          "when": "editorTextFocus",
+          "group": "auditAssistant@3"
         }
       ],
       "view/title": [
@@ -115,6 +171,43 @@
           "command": "auditAssistant.refreshAnalysisView",
           "when": "view == auditFileAnalysis",
           "group": "navigation@2"
+        },
+        {
+          "command": "auditAssistant.scanTaint",
+          "when": "view == auditSourceSink",
+          "group": "navigation@1"
+        },
+        {
+          "command": "auditAssistant.refreshSourceSink",
+          "when": "view == auditSourceSink",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "auditAssistant.confirmMark",
+          "when": "view == auditSourceSink && viewItem == auditMark.candidate",
+          "group": "inline@1"
+        },
+        {
+          "command": "auditAssistant.excludeMark",
+          "when": "view == auditSourceSink && viewItem == auditMark.candidate",
+          "group": "inline@2"
+        },
+        {
+          "command": "auditAssistant.restoreMark",
+          "when": "view == auditSourceSink && viewItem == auditMark.confirmed",
+          "group": "inline@1"
+        },
+        {
+          "command": "auditAssistant.restoreMark",
+          "when": "view == auditSourceSink && viewItem == auditMark.excluded",
+          "group": "inline@1"
+        },
+        {
+          "command": "auditAssistant.deleteMark",
+          "when": "view == auditSourceSink && viewItem =~ /auditMark/",
+          "group": "inline@9"
         }
       ]
     },

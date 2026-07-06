@@ -11,6 +11,7 @@
     "src/llm/client.ts",
     "src/store/auditStore.ts",
     "src/features/fileAnalysis.ts",
-    "src/features/architecture.ts"
+    "src/features/architecture.ts",
+    "src/features/taint/**/*.ts"
   ]
 }
