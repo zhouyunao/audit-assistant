@@ -3,3 +3,4 @@ dist/
 out/
 grammars/
 *.vsix
+.claude/
