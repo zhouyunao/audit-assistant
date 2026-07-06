@@ -1,0 +1,203 @@
+{
+  "name": "audit-assistant",
+  "displayName": "Audit Assistant",
+  "description": "LLM 辅助的多语言代码安全审计：项目结构图、文件功能总结与漏洞初筛、source/sink 标记与调用链确认，结果保存在 .audit/ 目录与团队共享",
+  "version": "0.1.0",
+  "publisher": "audit-team",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "auditAssistant",
+          "title": "Audit Assistant",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "auditAssistant": [
+        {
+          "id": "auditFileAnalysis",
+          "name": "文件分析",
+          "icon": "media/icon.svg"
+        },
+        {
+          "id": "auditSourceSink",
+          "name": "Source / Sink",
+          "icon": "media/icon.svg"
+        },
+        {
+          "id": "auditFindings",
+          "name": "调用链结论",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "auditFileAnalysis",
+        "contents": "打开一个代码文件后，点击下方按钮进行分析。\n[分析当前文件](command:auditAssistant.analyzeCurrentFile)\n首次使用请先设置 LLM 端点：\n[设置 API Key](command:auditAssistant.setApiKey)"
+      },
+      {
+        "view": "auditSourceSink",
+        "contents": "source/sink 候选扫描将在后续版本提供。已手动标记的条目会显示在这里。"
+      },
+      {
+        "view": "auditFindings",
+        "contents": "调用链确认功能将在后续版本提供。已记录的结论（.audit/findings/）会显示在这里。"
+      }
+    ],
+    "commands": [
+      {
+        "command": "auditAssistant.setApiKey",
+        "title": "设置 LLM API Key",
+        "category": "Audit"
+      },
+      {
+        "command": "auditAssistant.indexWorkspace",
+        "title": "索引整个项目",
+        "category": "Audit"
+      },
+      {
+        "command": "auditAssistant.analyzeCurrentFile",
+        "title": "分析当前文件",
+        "category": "Audit",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "auditAssistant.refreshAnalysisView",
+        "title": "刷新",
+        "category": "Audit",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "auditAssistant.generateArchitecture",
+        "title": "生成项目结构树",
+        "category": "Audit"
+      },
+      {
+        "command": "auditAssistant.showArchitecture",
+        "title": "查看项目结构树",
+        "category": "Audit"
+      },
+      {
+        "command": "auditAssistant.openIndexCache",
+        "title": "打开索引缓存位置",
+        "category": "Audit"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "auditAssistant.analyzeCurrentFile",
+          "group": "auditAssistant@1"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "auditAssistant.analyzeCurrentFile",
+          "when": "view == auditFileAnalysis",
+          "group": "navigation@1"
+        },
+        {
+          "command": "auditAssistant.refreshAnalysisView",
+          "when": "view == auditFileAnalysis",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Audit Assistant",
+      "properties": {
+        "auditAssistant.llm.baseUrl": {
+          "type": "string",
+          "default": "http://localhost:11434/v1",
+          "description": "OpenAI 兼容端点的 Base URL（如 http://内网host:8000/v1）。API Key 通过命令「Audit: 设置 LLM API Key」保存在 VSCode SecretStorage，不会写入设置文件。"
+        },
+        "auditAssistant.llm.model": {
+          "type": "string",
+          "default": "",
+          "description": "模型名（传给 /chat/completions 的 model 字段）"
+        },
+        "auditAssistant.llm.temperature": {
+          "type": "number",
+          "default": 0.2,
+          "description": "采样温度，审计场景建议低温"
+        },
+        "auditAssistant.llm.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "description": "单次回复的最大 token 数"
+        },
+        "auditAssistant.llm.timeoutMs": {
+          "type": "number",
+          "default": 180000,
+          "description": "单次请求超时（毫秒）"
+        },
+        "auditAssistant.analysis.outputLanguage": {
+          "type": "string",
+          "enum": [
+            "zh",
+            "en"
+          ],
+          "default": "zh",
+          "description": "分析结果的输出语言"
+        },
+        "auditAssistant.index.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/.git/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/out/**",
+            "**/target/**",
+            "**/vendor/**",
+            "**/.audit/**",
+            "**/*.min.js"
+          ],
+          "description": "索引时排除的 glob"
+        },
+        "auditAssistant.author": {
+          "type": "string",
+          "default": "",
+          "description": "写入标记/结论的审计人名字，留空则使用系统用户名"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "copy-wasm": "node scripts/copy-wasm.js",
+    "build": "npm run copy-wasm && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "typecheck": "tsc --noEmit",
+    "compile-test": "tsc -p tsconfig.test.json",
+    "test": "npm run copy-wasm && npm run compile-test && node --test \"test/*.test.cjs\" && node test/bundle-smoke.cjs",
+    "vscode:prepublish": "npm run build -- --production"
+  },
+  "dependencies": {
+    "web-tree-sitter": "^0.25.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.24.0",
+    "tree-sitter-wasms": "^0.1.12",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "out",
+    "declaration": false
+  },
+  "include": [
+    "src/indexer/**/*.ts",
+    "src/types.ts",
+    "src/llm/client.ts",
+    "src/store/auditStore.ts",
+    "src/features/fileAnalysis.ts",
+    "src/features/architecture.ts"
+  ]
+}
