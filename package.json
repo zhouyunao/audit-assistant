@@ -52,11 +52,11 @@
       },
       {
         "view": "auditSourceSink",
-        "contents": "source/sink 候选扫描将在后续版本提供。已手动标记的条目会显示在这里。"
+        "contents": "还没有 source/sink 标记。\n[扫描 Source/Sink 候选](command:auditAssistant.scanTaint)\n或在编辑器中右键「标记为 Source/Sink」手动标记。"
       },
       {
         "view": "auditFindings",
-        "contents": "调用链确认功能将在后续版本提供。已记录的结论（.audit/findings/）会显示在这里。"
+        "contents": "还没有调用链结论。\n在「Source / Sink」视图的 Sink 条目上点「确认调用链」，或在 Sink 行的 CodeLens 上点「确认调用链」即可生成。"
       }
     ],
     "commands": [
@@ -142,6 +142,24 @@
         "title": "刷新",
         "category": "Audit",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "auditAssistant.verifyChain",
+        "title": "确认调用链",
+        "category": "Audit",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "auditAssistant.deleteFinding",
+        "title": "删除结论",
+        "category": "Audit",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "auditAssistant.refreshFindings",
+        "title": "刷新",
+        "category": "Audit",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -181,32 +199,42 @@
           "command": "auditAssistant.refreshSourceSink",
           "when": "view == auditSourceSink",
           "group": "navigation@2"
+        },
+        {
+          "command": "auditAssistant.refreshFindings",
+          "when": "view == auditFindings",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
         {
+          "command": "auditAssistant.verifyChain",
+          "when": "view == auditSourceSink && viewItem =~ /auditMark\\.sink\\.(candidate|confirmed)/",
+          "group": "inline@0"
+        },
+        {
           "command": "auditAssistant.confirmMark",
-          "when": "view == auditSourceSink && viewItem == auditMark.candidate",
+          "when": "view == auditSourceSink && viewItem =~ /auditMark\\.(source|sink)\\.candidate/",
           "group": "inline@1"
         },
         {
           "command": "auditAssistant.excludeMark",
-          "when": "view == auditSourceSink && viewItem == auditMark.candidate",
+          "when": "view == auditSourceSink && viewItem =~ /auditMark\\.(source|sink)\\.candidate/",
           "group": "inline@2"
         },
         {
           "command": "auditAssistant.restoreMark",
-          "when": "view == auditSourceSink && viewItem == auditMark.confirmed",
-          "group": "inline@1"
-        },
-        {
-          "command": "auditAssistant.restoreMark",
-          "when": "view == auditSourceSink && viewItem == auditMark.excluded",
+          "when": "view == auditSourceSink && viewItem =~ /auditMark\\.(source|sink)\\.(confirmed|excluded)/",
           "group": "inline@1"
         },
         {
           "command": "auditAssistant.deleteMark",
           "when": "view == auditSourceSink && viewItem =~ /auditMark/",
+          "group": "inline@9"
+        },
+        {
+          "command": "auditAssistant.deleteFinding",
+          "when": "view == auditFindings && viewItem == auditFinding",
           "group": "inline@9"
         }
       ]

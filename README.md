@@ -11,7 +11,7 @@ LLM 辅助的多语言代码安全审计 VSCode 扩展。面向"整个项目"的
 | 审计数据保存在 `.audit/`，团队共享 | ✅ 已完成（文件分析、结构图部分） |
 | 项目结构树（目录树 + 模块职责 + 依赖关系） | ✅ M4 已完成 |
 | source/sink 规则扫描、手动标记 | ✅ M5 已完成 |
-| 调用链确认（LLM agent 逐跳取证） | ⏳ M6 计划中（数据格式与展示视图已就绪） |
+| 调用链确认（反向路径搜索 + LLM agent 逐跳取证） | ✅ M6 已完成 |
 | 汇总报告导出 | ⏳ M7 计划中 |
 
 支持语言：Java、JavaScript/JSX、TypeScript/TSX、Python、Go、PHP、C、C++、C#。加新语言只需在 `src/indexer/languages.ts` 加一条 spec 并在 `scripts/copy-wasm.js` 里加对应 grammar（`tree-sitter-wasms` 包里还有 Kotlin/Ruby/Rust/Swift 等现成的）。
@@ -40,7 +40,8 @@ npm run build      # 拷贝 wasm + 打包 dist/extension.js
 2. 运行 **`Audit: 生成项目结构树`**：生成带注释的目录树——每个模块目录标注文件数、LLM 推断的职责、依赖去向（基于 import 关系与跨文件调用聚合；未配置 LLM 也能出树，只是没有职责文字）。结果写入 `.audit/architecture.md` 并自动打开 Markdown 预览。之后用 **`Audit: 查看项目结构树`** 直接打开。
 3. 打开任意代码文件，运行 **`Audit: 分析当前文件`**（命令面板 / 编辑器右键 / 侧边栏按钮）。左侧 Audit Assistant 面板查看：文件功能总结、逐函数一句话说明（点击跳转）、疑似漏洞（严重度/置信度/理由/建议）、需人工注意的代码段；编辑器内相应行有高亮和 hover 详情。
 4. **Source/Sink**：运行 **`Audit: 扫描 Source/Sink 候选`**，内置多语言规则库（命令执行、SQL、eval、反序列化、XSS、HTTP 入参、环境变量等）扫出候选，列在「Source / Sink」视图（按 Sink/Source 分组，已确认→候选→已排除 排序）。对候选行的 CodeLens 点「确认/排除」，或在编辑器右键 **`标记为 Source/Sink`** 手动标记（人工标记不会被重扫清除）；已标记行在编辑器左侧有颜色标示。标记存入 `.audit/marks.json`。
-5. 结果自动写入项目根的 `.audit/` 目录。**把 `.audit/` 提交进 git（或直接拷给同事）即可共享**——同事打开同一文件时直接看到已有分析与标记；代码改动后会显示"分析结果可能过期"。
+5. **调用链确认**：在「Source / Sink」视图的 Sink 条目（或编辑器里 Sink 行的 CodeLens）上点 **`确认调用链`**——先在近似调用图上从该 Sink 反向搜出候选链（命中 source 标记或调用入口即为完整链），多条候选时弹出选择；再由 LLM 沿链逐跳读源码取证（数据是否真的流到 sink、中途有无净化），需要时自动调用 `get_callers`/`read_function`/`search_text` 工具补充上下文。结论（可达/不可达/待定 + 逐跳证据）存入 `.audit/findings/`，在「调用链结论」视图可展开回放，点每一跳跳转代码。端点不支持 tool-calling 时自动降级（每跳源码已预取进 prompt，仍能给结论）。
+6. 结果自动写入项目根的 `.audit/` 目录。**把 `.audit/` 提交进 git（或直接拷给同事）即可共享**——同事打开同一文件时直接看到已有分析与标记；代码改动后会显示"分析结果可能过期"。
 
 ## `.audit/` 目录格式
 
@@ -51,7 +52,7 @@ npm run build      # 拷贝 wasm + 打包 dist/extension.js
 ├── architecture.json   # 结构数据（程序复用）
 ├── files/<hash>.json   # 每文件分析：summary / functions / issues / attention（含 contentHash 与审计人）
 ├── marks.json          # source/sink 标记（含 kind/status/origin/category/cwe/作者）
-├── findings/<id>.json  # 调用链结论（M6 起写入；已有数据会在侧边栏展示）
+├── findings/<id>.json  # 调用链结论（verdict + 逐跳证据 chain + 关联的 source/sink 标记）
 └── report.md           # 汇总报告（M7）
 ```
 
@@ -102,4 +103,4 @@ npx @vscode/vsce package    # 生成 audit-assistant-<version>.vsix
 
 ### 代码结构
 
-`src/` 下：`indexer/`（tree-sitter 多语言解析、符号表、近似调用图、缓存）、`llm/`（OpenAI 兼容客户端）、`features/`（`fileAnalysis` 文件分析、`architecture` 结构树、`taint/` source/sink 规则与扫描）、`store/`（`.audit/` 读写）、`views/`（侧边栏 TreeView、CodeLens、编辑器装饰）、`extension.ts`（激活入口，注册命令/视图/事件）。
+`src/` 下：`indexer/`（tree-sitter 多语言解析、符号表、近似调用图、缓存）、`llm/`（`client` OpenAI 兼容客户端、`agentLoop` 通用 tool-calling 循环）、`features/`（`fileAnalysis` 文件分析、`architecture` 结构树、`taint/` source/sink 规则与扫描、`taint/pathSearch` 调用链反向搜索、`taint/chainVerify` LLM 逐跳取证）、`store/`（`.audit/` 读写）、`views/`（侧边栏 TreeView、CodeLens、编辑器装饰）、`extension.ts`（激活入口，注册命令/视图/事件）。

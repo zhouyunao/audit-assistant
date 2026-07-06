@@ -13,12 +13,15 @@ import { generateArchitecture } from './features/architecture';
 import { TAINT_RULES } from './features/taint/rules';
 import { compileRules, scanFile, mergeCandidates } from './features/taint/candidates';
 import { applyManualMark, symbolAt } from './features/taint/marks';
+import { searchChainsFromSink } from './features/taint/pathSearch';
+import { verifyChain } from './features/taint/chainVerify';
 import { FileAnalysisTreeProvider } from './views/fileAnalysisTree';
 import { AnalysisDecorations } from './views/decorations';
 import { SourceSinkTreeProvider } from './views/sourceSinkTree';
 import { MarkCodeLensProvider } from './views/markCodeLens';
 import { MarkDecorations } from './views/markDecorations';
-import { FindingsTreeProvider } from './views/placeholderTrees';
+import { FindingsTreeProvider } from './views/findingsTree';
+import { Mark } from './types';
 
 let indexCache: IndexCache | undefined;
 let projectIndex: ProjectIndex | undefined;
@@ -47,6 +50,16 @@ export function activate(context: vscode.ExtensionContext): void {
   index.restore(indexCache.load());
 
   const relPathOf = (uri: vscode.Uri) => vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+
+  /** 读取工作区相对路径的文件内容（供调用链取证的工具/预取使用） */
+  const readFileRel = async (relFile: string): Promise<string | undefined> => {
+    try {
+      const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(path.join(workspaceRoot, relFile)));
+      return Buffer.from(bytes).toString('utf8');
+    } catch {
+      return undefined;
+    }
+  };
 
   const analysisTree = new FileAnalysisTreeProvider();
   const sourceSinkTree = new SourceSinkTreeProvider(store);
@@ -292,7 +305,7 @@ export function activate(context: vscode.ExtensionContext): void {
         { location: vscode.ProgressLocation.Notification, title: 'Audit: 扫描 Source/Sink 候选', cancellable: true },
         async (progress, token) => {
           const files = index.allFiles();
-          const found: import('./types').Mark[] = [];
+          const found: Mark[] = [];
           let done = 0;
           for (const fi of files) {
             if (token.isCancellationRequested) {
@@ -337,6 +350,84 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     vscode.commands.registerCommand('auditAssistant.refreshSourceSink', () => refreshMarks()),
+
+    vscode.commands.registerCommand('auditAssistant.verifyChain', async (arg) => {
+      const id = resolveMarkId(arg);
+      const marks = store.loadMarks();
+      const sink = id ? marks.find((m) => m.id === id) : marks.find((m) => m.kind === 'sink');
+      if (!sink || sink.kind !== 'sink') {
+        vscode.window.showWarningMessage('Audit: 请在 Sink 标记上执行调用链确认（先扫描或手动标记 Sink）');
+        return;
+      }
+      const llmCfg = await getLlmConfig(context);
+      if (!llmCfg.model) {
+        const pick = await vscode.window.showWarningMessage('Audit: 调用链确认需要配置 LLM 端点/模型', '打开设置');
+        if (pick === '打开设置') {
+          vscode.commands.executeCommand('workbench.action.openSettings', 'auditAssistant.llm');
+        }
+        return;
+      }
+      if (index.stats.files === 0) {
+        await vscode.commands.executeCommand('auditAssistant.indexWorkspace');
+      }
+
+      const sourceMarks = marks.filter((m) => m.kind === 'source');
+      const candidates = searchChainsFromSink(index, sink.file, sink.line, { sourceMarks });
+      if (!candidates.length) {
+        vscode.window.showInformationMessage('Audit: 未搜索到通向该 Sink 的调用链候选');
+        return;
+      }
+
+      // 多条候选时让用户选一条（默认最高分）
+      let chosen = candidates[0];
+      if (candidates.length > 1) {
+        const items = candidates.map((c, i) => ({
+          label: `${c.hops[0].name} → … → ${c.hops[c.hops.length - 1].name}`,
+          description: `${c.hops.length} 跳 · ${c.reachedSourceMarkId ? '命中 Source' : c.entryReason ?? ''} · 评分 ${c.score}`,
+          detail: c.hops.map((h) => h.name).join(' → '),
+          index: i,
+        }));
+        const picked = await vscode.window.showQuickPick(items, { title: `选择要验证的调用链（共 ${candidates.length} 条候选）` });
+        if (!picked) {
+          return;
+        }
+        chosen = candidates[picked.index];
+      }
+
+      const source = chosen.reachedSourceMarkId ? sourceMarks.find((m) => m.id === chosen.reachedSourceMarkId) : undefined;
+      const settings = getSettings();
+      const client = new LlmClient(llmCfg);
+      try {
+        const finding = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Audit: LLM 验证调用链', cancellable: false },
+          () =>
+            verifyChain(index, client, readFileRel, chosen, sink, source, {
+              author: settings.author,
+              outputLanguage: settings.outputLanguage,
+            }),
+        );
+        store.saveFinding(finding);
+        findingsTree.refresh();
+        output.appendLine(`[verify] ${finding.title} — ${finding.chain.length} 跳`);
+        vscode.commands.executeCommand('auditFindings.focus');
+        const verdictCn = finding.verdict === 'reachable' ? '可达' : finding.verdict === 'unreachable' ? '不可达' : '待定';
+        vscode.window.showInformationMessage(`Audit: 调用链结论 — ${verdictCn}。已存入 .audit/findings/`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        output.appendLine(`[verify] 失败: ${msg}`);
+        vscode.window.showErrorMessage(`Audit: 调用链验证失败：${msg}`);
+      }
+    }),
+
+    vscode.commands.registerCommand('auditAssistant.deleteFinding', (arg) => {
+      const fid = typeof arg === 'string' ? arg : (arg as { findingId?: string })?.findingId;
+      if (fid) {
+        store.deleteFinding(fid);
+        findingsTree.refresh();
+      }
+    }),
+
+    vscode.commands.registerCommand('auditAssistant.refreshFindings', () => findingsTree.refresh()),
 
     vscode.commands.registerCommand('auditAssistant.indexWorkspace', async () => {
       const settings = getSettings();

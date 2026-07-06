@@ -39,6 +39,9 @@ export class MarkCodeLensProvider implements vscode.CodeLensProvider {
       for (const [title, command] of actions) {
         lenses.push(new vscode.CodeLens(range, { title, command, arguments: [m.id] }));
       }
+      if (m.kind === 'sink' && m.status !== 'excluded') {
+        lenses.push(new vscode.CodeLens(range, { title: '确认调用链', command: 'auditAssistant.verifyChain', arguments: [m.id] }));
+      }
     }
     return lenses;
   }

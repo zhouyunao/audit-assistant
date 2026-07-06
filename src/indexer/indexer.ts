@@ -97,6 +97,13 @@ export class ProjectIndex {
     return result;
   }
 
+  /** 按符号 id（<file>#<name>@<row>）查符号定义 */
+  symbolById(id: string): SymbolInfo | undefined {
+    const file = id.split('#')[0];
+    const fi = this.files.get(file);
+    return fi?.symbols.find((s) => s.id === id);
+  }
+
   /** 谁调用了名为 name 的符号 */
   callersOf(name: string): CallSite[] {
     const result: CallSite[] = [];

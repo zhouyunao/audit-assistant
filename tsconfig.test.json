@@ -9,6 +9,7 @@
     "src/indexer/**/*.ts",
     "src/types.ts",
     "src/llm/client.ts",
+    "src/llm/agentLoop.ts",
     "src/store/auditStore.ts",
     "src/features/fileAnalysis.ts",
     "src/features/architecture.ts",

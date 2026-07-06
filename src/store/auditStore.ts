@@ -124,6 +124,14 @@ export class AuditStore {
     this.init();
     this.writeJson(path.join(this.root, 'findings', `${finding.id}.json`), finding);
   }
+
+  deleteFinding(id: string): void {
+    try {
+      fs.unlinkSync(path.join(this.root, 'findings', `${id}.json`));
+    } catch {
+      // 已不存在则忽略
+    }
+  }
 }
 
 function architectureMarkdown(arch: Architecture): string {

@@ -79,7 +79,7 @@ export class SourceSinkTreeProvider implements vscode.TreeDataProvider<Node> {
     );
     node.iconPath = STATUS_ICON[m.status];
     node.markId = m.id;
-    node.contextValue = `auditMark.${m.status}`;
+    node.contextValue = `auditMark.${m.kind}.${m.status}`;
     node.command = { command: 'auditAssistant.revealLocation', title: '跳转', arguments: [m.file, m.line] };
     return node;
   }
