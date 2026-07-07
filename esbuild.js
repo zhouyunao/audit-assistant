@@ -15,9 +15,9 @@ async function main() {
     sourcemap: !production,
     minify: production,
     logLevel: 'info',
-    // web-tree-sitter 是 ESM 包，内部用 import.meta.url 定位自身；
-    // 打成 CJS 后该值会变成 undefined，导致 createRequire/fileURLToPath 报
-    // "filename must be a file URL ... Received undefined"。用 __filename 补上。
+    // web-tree-sitter is an ESM package that uses import.meta.url to locate itself; when bundled
+    // to CJS that value becomes undefined, making createRequire/fileURLToPath throw
+    // "filename must be a file URL ... Received undefined". Supply it from __filename.
     define: { 'import.meta.url': '__esbuild_import_meta_url' },
     banner: {
       js: "const __esbuild_import_meta_url = require('node:url').pathToFileURL(__filename).href;",

@@ -8,12 +8,12 @@ class Node extends vscode.TreeItem {
 }
 
 const VERDICT: Record<Finding['verdict'], { label: string; icon: vscode.ThemeIcon }> = {
-  reachable: { label: '可达', icon: new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground')) },
-  unreachable: { label: '不可达', icon: new vscode.ThemeIcon('pass', new vscode.ThemeColor('testing.iconPassed')) },
-  undetermined: { label: '待定', icon: new vscode.ThemeIcon('question') },
+  reachable: { label: 'Reachable', icon: new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground')) },
+  unreachable: { label: 'Unreachable', icon: new vscode.ThemeIcon('pass', new vscode.ThemeColor('testing.iconPassed')) },
+  undetermined: { label: 'Undetermined', icon: new vscode.ThemeIcon('question') },
 };
 
-/** 调用链结论视图：每条 finding 可展开为逐跳链路，点击每跳跳转到代码。 */
+/** Call-chain findings view: each finding expands into its per-hop chain; click a hop to jump to code. */
 export class FindingsTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly emitter = new vscode.EventEmitter<Node | undefined>();
   readonly onDidChangeTreeData = this.emitter.event;
@@ -43,8 +43,8 @@ export class FindingsTreeProvider implements vscode.TreeDataProvider<Node> {
   private findingNode(f: Finding): Node {
     const v = VERDICT[f.verdict];
     const node = new Node(f.title, vscode.TreeItemCollapsibleState.Collapsed);
-    node.description = `${f.chain.length} 跳 · ${f.author}`;
-    node.tooltip = new vscode.MarkdownString(`**结论：${v.label}**\n\n${f.analysis}`);
+    node.description = `${f.chain.length} hops · ${f.author}`;
+    node.tooltip = new vscode.MarkdownString(`**Verdict: ${v.label}**\n\n${f.analysis}`);
     node.iconPath = v.icon;
     node.findingId = f.id;
     node.contextValue = 'auditFinding';
@@ -53,7 +53,7 @@ export class FindingsTreeProvider implements vscode.TreeDataProvider<Node> {
       hop.description = `${h.file}:${h.line}`;
       hop.tooltip = h.evidence || undefined;
       hop.iconPath = new vscode.ThemeIcon(i === f.chain.length - 1 ? 'flame' : 'arrow-small-right');
-      hop.command = { command: 'auditAssistant.revealLocation', title: '跳转', arguments: [h.file, h.line] };
+      hop.command = { command: 'auditAssistant.revealLocation', title: 'Go to', arguments: [h.file, h.line] };
       return hop;
     });
     return node;

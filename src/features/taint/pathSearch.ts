@@ -3,25 +3,26 @@ import { enclosingSymbol } from '../../indexer/callGraph';
 import { Mark, SymbolInfo } from '../../types';
 
 /**
- * 调用链候选搜索：在近似调用图上从 sink 反向 BFS/DFS 到调用入口/source。
- * 结果是「过近似」的候选链（同名≠真调用），精度由后续 LLM 逐跳取证弥补。
+ * Call-chain candidate search: reverse BFS/DFS on the approximate call graph from a sink back
+ * to a call entry / source. Results are "over-approximate" candidate chains (same name != real
+ * call); precision is compensated by subsequent per-hop LLM evidence-gathering.
  */
 
 export interface ChainNode {
-  /** 符号 id；模块顶层/无法解析时为 undefined */
+  /** Symbol id; undefined for module top-level / unresolvable nodes */
   symbolId?: string;
   name: string;
   file: string;
-  /** 1-based：该跳把数据传向下一跳（更靠近 sink）的位置；sink 跳为 sink 本身 */
+  /** 1-based: where this hop passes data to the next hop (closer to the sink); the sink hop is the sink itself */
   line: number;
 }
 
 export interface ChainCandidate {
-  /** 入口 → … → sink 顺序 */
+  /** entry -> ... -> sink order */
   hops: ChainNode[];
-  /** 命中的 source 标记 id（如有） */
+  /** Id of the matched source mark (if any) */
   reachedSourceMarkId?: string;
-  /** 终点被判定为入口的原因（启发式命中的函数名 / 无调用者） */
+  /** Why the terminal was judged an entry (heuristic function name / no callers) */
   entryReason?: string;
   score: number;
 }
@@ -30,14 +31,15 @@ export interface SearchOptions {
   maxDepth?: number;
   maxCallersPerNode?: number;
   maxChains?: number;
-  /** 已确认/候选的 source 标记，命中即视为完整链 */
+  /** Confirmed/candidate source marks; a hit means a complete chain */
   sourceMarks?: Mark[];
 }
 
 const DEFAULTS = { maxDepth: 8, maxCallersPerNode: 8, maxChains: 20 };
 
-// 入口函数名：只收几乎必然是框架入口、且很少被应用代码自身调用的固定签名，
-// 避免 service/handle 这类通用业务方法名导致向上追溯提前终止。
+// Entry function names: only fixed signatures that are almost always framework entry points and
+// rarely called by application code itself, to avoid generic business method names like
+// service/handle causing premature termination while walking upward.
 const ENTRY_NAMES = new Set(['main', 'doGet', 'doPost', 'doPut', 'doDelete', 'doHead', 'ServeHTTP']);
 
 function isEntryName(name: string): boolean {
@@ -46,9 +48,9 @@ function isEntryName(name: string): boolean {
 
 function terminalReason(node: SymbolInfo, hadCallers: boolean): string {
   if (isEntryName(node.name)) {
-    return `入口函数 ${node.name}`;
+    return `entry function ${node.name}`;
   }
-  return hadCallers ? '达到深度上限' : '无调用者（可能为框架入口）';
+  return hadCallers ? 'reached depth limit' : 'no callers (possible framework entry)';
 }
 
 function sourceMarkIn(sym: SymbolInfo, marks: Mark[] | undefined): string | undefined {
@@ -66,7 +68,7 @@ function scoreOf(hops: ChainNode[], reachedSource: boolean, entry: boolean): num
 }
 
 /**
- * 从 sink 位置反向搜索候选链。sinkLine 为 1-based。
+ * Reverse-search candidate chains from a sink location. sinkLine is 1-based.
  */
 export function searchChainsFromSink(
   index: ProjectIndex,
@@ -78,10 +80,10 @@ export function searchChainsFromSink(
   const fi = index.getFile(sinkFile);
   const s0 = fi ? enclosingSymbol(fi.symbols, sinkLine - 1) : undefined;
 
-  // sink 不在任何函数内（顶层语句）：无法反向，返回单跳链
+  // Sink is not inside any function (top-level statement): can't walk back, return a single-hop chain
   if (!s0) {
     const name = sinkFile.split('/').pop() ?? sinkFile;
-    return [{ hops: [{ name, file: sinkFile, line: sinkLine }], entryReason: '顶层代码', score: 0 }];
+    return [{ hops: [{ name, file: sinkFile, line: sinkLine }], entryReason: 'top-level code', score: 0 }];
   }
 
   const sinkHop: ChainNode = { symbolId: s0.id, name: s0.name, file: s0.file, line: sinkLine };
@@ -101,7 +103,7 @@ export function searchChainsFromSink(
     if (results.length >= opts.maxChains) {
       return;
     }
-    // 收集调用者，按（同文件优先、去重 fromSymbol）整理
+    // Collect callers, deduped by fromSymbol and preferring same-file
     const callers = index.callersOf(node.name);
     const seen = new Set<string>();
     const entries: { callerSym?: SymbolInfo; callLine: number }[] = [];
@@ -120,12 +122,12 @@ export function searchChainsFromSink(
       return af - bf;
     });
 
-    // 没有调用者 → 当前节点是入口，收尾（用 node.name 判断是否框架入口）
+    // No callers -> this node is an entry; finalize (use node.name to decide if it's a framework entry)
     if (entries.length === 0) {
       finalize(pathTail, undefined, terminalReason(node, false));
       return;
     }
-    // 到达深度上限 → 就地收尾
+    // Reached depth limit -> finalize in place
     if (depth >= opts.maxDepth) {
       finalize(pathTail, undefined, terminalReason(node, true));
       return;
@@ -136,20 +138,20 @@ export function searchChainsFromSink(
       if (results.length >= opts.maxChains || expanded >= opts.maxCallersPerNode) {
         break;
       }
-      // 顶层调用（不在函数内）：视为模块入口
+      // Top-level call (not inside a function): treat as a module entry
       if (!e.callerSym) {
-        finalize([{ name: `${node.file} 顶层`, file: node.file, line: e.callLine }, ...pathTail], undefined, '模块顶层调用');
+        finalize([{ name: `${node.file} (top level)`, file: node.file, line: e.callLine }, ...pathTail], undefined, 'module top-level call');
         expanded++;
         continue;
       }
       if (visited.has(e.callerSym.id)) {
-        continue; // 环：跳过，不计入 expanded
+        continue; // cycle: skip, don't count toward expanded
       }
       const hop: ChainNode = { symbolId: e.callerSym.id, name: e.callerSym.name, file: e.callerSym.file, line: e.callLine };
       const newPath = [hop, ...pathTail];
       const srcId = sourceMarkIn(e.callerSym, opts.sourceMarks);
       if (srcId) {
-        finalize(newPath, srcId); // 命中 source，完整链
+        finalize(newPath, srcId); // source hit, complete chain
         expanded++;
         continue;
       }
@@ -159,9 +161,9 @@ export function searchChainsFromSink(
       expanded++;
     }
 
-    // 所有调用者都因成环被跳过 → 就地收尾，避免该分支丢失
+    // All callers were skipped due to cycles -> finalize in place so this branch isn't lost
     if (expanded === 0) {
-      finalize(pathTail, undefined, '调用链在此成环');
+      finalize(pathTail, undefined, 'chain cycles here');
     }
   };
 

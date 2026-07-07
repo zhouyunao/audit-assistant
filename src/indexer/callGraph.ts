@@ -11,8 +11,8 @@ const CALLEE_ID_TYPES = [
 ];
 
 /**
- * 提取被调名（近似）：取调用目标里最右侧的标识符。
- * a.b.c(x) -> c；new Foo() -> Foo；query(sql) -> query
+ * Extract the (approximate) callee name: the rightmost identifier of the call target.
+ * a.b.c(x) -> c; new Foo() -> Foo; query(sql) -> query
  */
 function calleeName(node: Node): string | undefined {
   const target =
@@ -59,7 +59,7 @@ export function extractCalls(root: Node, spec: LanguageSpec, file: string, symbo
   return calls;
 }
 
-/** 包含该行的最小符号（函数/方法优先于类） */
+/** Smallest symbol containing the given line (functions/methods preferred over classes). */
 export function enclosingSymbol(symbols: SymbolInfo[], line: number): SymbolInfo | undefined {
   let best: SymbolInfo | undefined;
   for (const s of symbols) {

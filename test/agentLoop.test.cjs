@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const { runAgent } = require('../out/llm/agentLoop');
 
-// 假 client：按预设脚本依次返回，记录收到的消息，用于验证工具循环
+// Fake client: returns scripted responses in order and records received messages, to verify the tool loop
 class FakeClient {
   constructor(responses) {
     this.responses = responses;
@@ -37,7 +37,7 @@ test('runAgent dispatches tool calls then returns final content', async () => {
   assert.equal(res.content, '{"verdict":"reachable"}');
   assert.equal(res.toolCalls, 1);
   assert.deepEqual(toolArgs, { name: 'dao' });
-  // 第二次请求应包含 assistant(tool_calls) 与 tool 结果消息
+  // the second request should include the assistant(tool_calls) and tool result messages
   const secondCall = client.received[1].messages;
   assert.ok(secondCall.some((m) => m.role === 'tool'));
 });
@@ -58,5 +58,5 @@ test('runAgent reports unknown tool without throwing', async () => {
   const res = await runAgent(client, [{ role: 'user', content: 'u' }], [], 5);
   assert.equal(res.content, 'done');
   const toolMsg = client.received[1].messages.find((m) => m.role === 'tool');
-  assert.match(toolMsg.content, /未知工具/);
+  assert.match(toolMsg.content, /unknown tool/);
 });

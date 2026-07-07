@@ -4,8 +4,8 @@ import { Parser, Language, Tree } from 'web-tree-sitter';
 import { LanguageSpec, specForFile } from './languages';
 
 /**
- * 管理 web-tree-sitter 的初始化与各语言 grammar 的懒加载。
- * grammarsDir 指向包含 tree-sitter.wasm 和各 tree-sitter-<lang>.wasm 的目录。
+ * Manages web-tree-sitter initialization and lazy-loading of per-language grammars.
+ * grammarsDir points to the directory containing tree-sitter.wasm and each tree-sitter-<lang>.wasm.
  */
 export class ParserPool {
   private languages = new Map<string, Language>();
@@ -40,7 +40,7 @@ export class ParserPool {
     return lang;
   }
 
-  /** 解析文件内容。不支持的语言返回 undefined。用完记得 tree.delete()。 */
+  /** Parse file content. Returns undefined for unsupported languages. Remember to call tree.delete() when done. */
   async parse(filePath: string, content: string): Promise<{ tree: Tree; spec: LanguageSpec } | undefined> {
     const spec = specForFile(filePath);
     if (!spec) {

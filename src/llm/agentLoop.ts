@@ -1,6 +1,6 @@
 import { ChatMessage, LlmProvider, ToolDef } from './client';
 
-/** 一个可被 LLM 调用的工具：定义 + 本地执行 */
+/** A tool the LLM can call: definition + local execution */
 export interface AgentTool {
   def: ToolDef;
   run(args: Record<string, unknown>): Promise<string> | string;
@@ -13,9 +13,10 @@ export interface AgentResult {
 }
 
 /**
- * 通用 tool-calling agent 循环：模型可反复调用工具，直到给出不含工具调用的最终回复。
- * 端点不支持 tools 时模型不会返回 tool_calls，循环第一步即拿到最终回复——因此对
- * 「已把上下文喂进 prompt、工具只是可选补充」的用法能自然降级。
+ * Generic tool-calling agent loop: the model may call tools repeatedly until it produces a
+ * final reply without tool calls. When the endpoint doesn't support tools, the model won't
+ * return tool_calls and the loop returns on the first step — so it degrades gracefully for
+ * "context already in the prompt, tools are just optional extras" usage.
  */
 export async function runAgent(
   client: LlmProvider,
@@ -39,20 +40,20 @@ export async function runAgent(
       const tool = byName.get(tc.function.name);
       let result: string;
       if (!tool) {
-        result = `错误：未知工具 ${tc.function.name}`;
+        result = `Error: unknown tool ${tc.function.name}`;
       } else {
         try {
           const args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
           result = await tool.run(args);
         } catch (e) {
-          result = `工具执行失败：${e instanceof Error ? e.message : String(e)}`;
+          result = `Tool execution failed: ${e instanceof Error ? e.message : String(e)}`;
         }
       }
       messages.push({ role: 'tool', tool_call_id: tc.id, content: result.slice(0, 8000) });
     }
   }
 
-  // 步数耗尽：再要一次不带工具的最终结论
-  const final = await client.chat([...messages, { role: 'user', content: '请基于以上信息直接给出最终 JSON 结论，不要再调用工具。' }]);
+  // Steps exhausted: ask once more for a final conclusion without tools
+  const final = await client.chat([...messages, { role: 'user', content: 'Based on the information above, give your final JSON conclusion directly without calling any more tools.' }]);
   return { content: final.content, steps: maxSteps, toolCalls };
 }

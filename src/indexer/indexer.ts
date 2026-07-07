@@ -15,15 +15,16 @@ export function isSupportedFile(filePath: string): boolean {
 }
 
 /**
- * 项目级索引：文件 -> 符号表 + 调用点。
- * 调用图为名称匹配的近似图，精确性由 LLM 沿链取证弥补（见 chainVerify）。
+ * Project-level index: file -> symbol table + call sites.
+ * The call graph is an approximate, name-matched graph; precision is compensated by
+ * LLM evidence-gathering along the chain (see chainVerify).
  */
 export class ProjectIndex {
   private files = new Map<string, FileIndex>();
 
   constructor(private readonly pool: ParserPool) {}
 
-  /** 解析并索引一个文件；内容未变化时直接返回缓存。 */
+  /** Parse and index a file; returns the cached entry when content is unchanged. */
   async indexFile(relPath: string, content: string): Promise<FileIndex | undefined> {
     const hash = contentHash(content);
     const existing = this.files.get(relPath);
@@ -55,7 +56,7 @@ export class ProjectIndex {
     }
   }
 
-  /** 从持久化缓存恢复（不重新解析） */
+  /** Restore from the persistent cache (without re-parsing). */
   restore(entries: FileIndex[]): void {
     for (const e of entries) {
       this.files.set(e.file, e);
@@ -74,7 +75,7 @@ export class ProjectIndex {
     return [...this.files.values()];
   }
 
-  /** 全项目同名符号（调用图解析用）。优先返回同文件、再同目录的定义。 */
+  /** All same-named symbols across the project (for call-graph resolution). Prefers same-file, then same-directory definitions. */
   symbolsByName(name: string, preferFile?: string): SymbolInfo[] {
     const result: SymbolInfo[] = [];
     for (const f of this.files.values()) {
@@ -97,14 +98,14 @@ export class ProjectIndex {
     return result;
   }
 
-  /** 按符号 id（<file>#<name>@<row>）查符号定义 */
+  /** Look up a symbol definition by id (<file>#<name>@<row>). */
   symbolById(id: string): SymbolInfo | undefined {
     const file = id.split('#')[0];
     const fi = this.files.get(file);
     return fi?.symbols.find((s) => s.id === id);
   }
 
-  /** 谁调用了名为 name 的符号 */
+  /** Which call sites invoke a symbol named `name`. */
   callersOf(name: string): CallSite[] {
     const result: CallSite[] = [];
     for (const f of this.files.values()) {

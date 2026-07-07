@@ -40,8 +40,8 @@ test('buildMessageBody flattens multi-turn with role labels (for stateless sessi
   );
   const text = body.parts[0].text;
   assert.match(text, /Q1/);
-  assert.match(text, /助手上一轮回复[\s\S]*A1/);
-  assert.match(text, /工具返回[\s\S]*T1/);
+  assert.match(text, /assistant previous reply[\s\S]*A1/);
+  assert.match(text, /tool result[\s\S]*T1/);
   assert.match(text, /Q2/);
   assert.equal(body.agent, undefined);
 });
@@ -56,7 +56,7 @@ test('extractText concatenates text parts, ignores non-text', () => {
   assert.equal(extractText({ info: { content: 'fallback' }, parts: [] }), 'fallback');
 });
 
-// 用假 fetch 走完整 chat 流程：建会话 → 发消息 → 抽取文本
+// Drive the full chat flow with a fake fetch: create session -> send message -> extract text
 function fakeFetch(routes) {
   const calls = [];
   const impl = async (url, init) => {
@@ -79,10 +79,10 @@ test('chat: creates session then posts message and returns extracted text', asyn
   assert.equal(res.content, '{"ok":true}');
   assert.equal(res.toolCalls, undefined);
 
-  // 第一次调用建会话，第二次发到该会话
+  // first call creates the session, second posts to that session
   assert.match(calls[0].url, /\/session$/);
   assert.match(calls[1].url, /\/session\/sess_123\/message$/);
-  // 密码作为 Bearer 头
+  // password sent as a Bearer header
   assert.equal(calls[0].headers.authorization, 'Bearer pw');
   assert.equal(client.model, 'anthropic/claude');
 });

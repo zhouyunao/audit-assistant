@@ -32,7 +32,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) {
-    // 没有打开工作区时只注册 setApiKey，避免其余功能空指针
+    // With no workspace open, only register setApiKey to avoid null pointers in other features
     context.subscriptions.push(
       vscode.commands.registerCommand('auditAssistant.setApiKey', () => setApiKeyCommand(context)),
     );
@@ -44,14 +44,14 @@ export function activate(context: vscode.ExtensionContext): void {
   projectIndex = index;
   const store = new AuditStore(workspaceRoot);
 
-  // 索引缓存：globalStorage/<workspace-hash>.json，二次打开免重扫
+  // Index cache: globalStorage/<workspace-hash>.json, avoids re-scanning on reopen
   const wsKey = crypto.createHash('sha1').update(workspaceRoot).digest('hex');
   indexCache = new IndexCache(path.join(context.globalStorageUri.fsPath, `index-${wsKey}.json`));
   index.restore(indexCache.load());
 
   const relPathOf = (uri: vscode.Uri) => vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
 
-  /** 读取工作区相对路径的文件内容（供调用链取证的工具/预取使用） */
+  /** Read the content of a workspace-relative file (used by chain-verification tools/pre-fetch) */
   const readFileRel = async (relFile: string): Promise<string | undefined> => {
     try {
       const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(path.join(workspaceRoot, relFile)));
@@ -76,7 +76,7 @@ export function activate(context: vscode.ExtensionContext): void {
     markDecorations,
   );
 
-  /** 把当前文件的 source/sink 标记画到编辑器上 */
+  /** Draw the current file's source/sink marks in the editor */
   const showMarksFor = (editor: vscode.TextEditor | undefined) => {
     if (!editor || editor.document.uri.scheme !== 'file') {
       return;
@@ -85,14 +85,14 @@ export function activate(context: vscode.ExtensionContext): void {
     markDecorations.apply(editor, store.loadMarks().filter((m) => m.file === rel));
   };
 
-  /** 标记数据变化后统一刷新：视图、CodeLens、当前编辑器装饰 */
+  /** After mark data changes, refresh everything: view, CodeLens, current editor decorations */
   const refreshMarks = () => {
     sourceSinkTree.refresh();
     markCodeLens.refresh();
     showMarksFor(vscode.window.activeTextEditor);
   };
 
-  /** 命令参数可能是标记 id 字符串，或 TreeView item（带 markId） */
+  /** The command argument may be a mark id string, or a TreeView item (with markId) */
   const resolveMarkId = (arg: unknown): string | undefined => {
     if (typeof arg === 'string') {
       return arg;
@@ -124,12 +124,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const markSelection = async (kind: 'source' | 'sink') => {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.uri.scheme !== 'file') {
-      vscode.window.showWarningMessage('Audit: 请先在代码文件中选中要标记的行');
+      vscode.window.showWarningMessage('Audit: Select the line to mark in a code file first');
       return;
     }
     const rel = relPathOf(editor.document.uri);
     const line0 = editor.selection.active.line;
-    // 尽量用已索引的符号；未索引则即时索引一次
+    // Prefer already-indexed symbols; index on the fly if not indexed yet
     let fileIndex = index.getFile(rel);
     if (!fileIndex) {
       fileIndex = await index.indexFile(rel, editor.document.getText());
@@ -143,10 +143,10 @@ export function activate(context: vscode.ExtensionContext): void {
     );
     store.upsertMark(mark);
     refreshMarks();
-    vscode.window.showInformationMessage(`Audit: 已标记 ${kind === 'sink' ? 'Sink' : 'Source'} — ${rel}:${line0 + 1}`);
+    vscode.window.showInformationMessage(`Audit: Marked ${kind === 'sink' ? 'Sink' : 'Source'} — ${rel}:${line0 + 1}`);
   };
 
-  /** 展示某编辑器对应文件的已有分析（含过期判断） */
+  /** Show the existing analysis for an editor's file (with staleness check) */
   const showAnalysisFor = (editor: vscode.TextEditor | undefined) => {
     if (!editor || editor.document.uri.scheme !== 'file') {
       analysisTree.update(undefined, 'none');
@@ -164,7 +164,7 @@ export function activate(context: vscode.ExtensionContext): void {
     decorations.apply(editor, analysis);
   };
 
-  // ---------- 命令 ----------
+  // ---------- Commands ----------
 
   context.subscriptions.push(
     vscode.commands.registerCommand('auditAssistant.setApiKey', () => setApiKeyCommand(context)),
@@ -190,16 +190,16 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('auditAssistant.analyzeCurrentFile', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.uri.scheme !== 'file') {
-        vscode.window.showWarningMessage('Audit Assistant: 请先打开要分析的代码文件');
+        vscode.window.showWarningMessage('Audit Assistant: Open a code file to analyze first');
         return;
       }
       const llmCfg = await getLlmConfig(context);
       if (!llmCfg.model) {
         const pick = await vscode.window.showWarningMessage(
-          'Audit Assistant: 尚未配置 LLM 端点/模型',
-          '打开设置',
+          'Audit Assistant: LLM endpoint/model not configured yet',
+          'Open Settings',
         );
-        if (pick === '打开设置') {
+        if (pick === 'Open Settings') {
           vscode.commands.executeCommand('workbench.action.openSettings', 'auditAssistant.llm');
         }
         return;
@@ -214,7 +214,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const analysis = await vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
-            title: `Audit: 分析 ${path.basename(relPath)}`,
+            title: `Audit: Analyzing ${path.basename(relPath)}`,
             cancellable: false,
           },
           (progress) =>
@@ -230,8 +230,8 @@ export function activate(context: vscode.ExtensionContext): void {
       } catch (e) {
         analysisTree.update(undefined, 'none', editor.document.uri);
         const msg = e instanceof Error ? e.message : String(e);
-        output.appendLine(`[analyze] ${relPath} 失败: ${msg}`);
-        vscode.window.showErrorMessage(`Audit Assistant 分析失败：${msg}`);
+        output.appendLine(`[analyze] ${relPath} failed: ${msg}`);
+        vscode.window.showErrorMessage(`Audit Assistant analysis failed: ${msg}`);
       }
     }),
 
@@ -245,7 +245,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await vscode.workspace.fs.stat(uri);
       } catch {
         vscode.window.showInformationMessage(
-          'Audit: 还没有索引缓存。先运行「Audit: 索引整个项目」，缓存会写入 ' + cachePath,
+          'Audit: No index cache yet. Run "Audit: Index Workspace" first; the cache will be written to ' + cachePath,
         );
         return;
       }
@@ -257,15 +257,15 @@ export function activate(context: vscode.ExtensionContext): void {
         await vscode.commands.executeCommand('auditAssistant.indexWorkspace');
       }
       if (index.stats.files === 0) {
-        vscode.window.showWarningMessage('Audit: 索引为空，无法生成结构图');
+        vscode.window.showWarningMessage('Audit: Index is empty; cannot generate the structure tree');
         return;
       }
-      // LLM 未配置时照常出图，只是没有模块职责标注
+      // Without LLM config the tree is still produced, just without module responsibility annotations
       const llmCfg = await getLlmConfig(context);
       const client = llmCfg.model ? createLlmProvider(llmCfg) : undefined;
       const settings = getSettings();
       const { architecture, llmError } = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'Audit: 生成项目结构图', cancellable: false },
+        { location: vscode.ProgressLocation.Notification, title: 'Audit: Generating structure tree', cancellable: false },
         (progress) =>
           generateArchitecture(index, store, client, {
             outputLanguage: settings.outputLanguage,
@@ -273,17 +273,17 @@ export function activate(context: vscode.ExtensionContext): void {
           }),
       );
       if (llmError) {
-        output.appendLine(`[architecture] LLM 标注失败: ${llmError}`);
-        vscode.window.showWarningMessage(`Audit: 结构树已生成，但 LLM 职责标注失败（${llmError}）`);
+        output.appendLine(`[architecture] LLM annotation failed: ${llmError}`);
+        vscode.window.showWarningMessage(`Audit: Structure tree generated, but LLM responsibility annotation failed (${llmError})`);
       }
       await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(path.join(store.root, 'architecture.md')));
-      output.appendLine(`[architecture] ${architecture.modules.length} 个模块，${architecture.edges.length} 条依赖边 -> .audit/architecture.md`);
+      output.appendLine(`[architecture] ${architecture.modules.length} modules, ${architecture.edges.length} dependency edges -> .audit/architecture.md`);
     }),
 
     vscode.commands.registerCommand('auditAssistant.showArchitecture', async () => {
       if (!store.loadArchitecture()) {
-        const pick = await vscode.window.showInformationMessage('还没有生成过结构树', '立即生成');
-        if (pick === '立即生成') {
+        const pick = await vscode.window.showInformationMessage('No structure tree has been generated yet', 'Generate now');
+        if (pick === 'Generate now') {
           vscode.commands.executeCommand('auditAssistant.generateArchitecture');
         }
         return;
@@ -296,13 +296,13 @@ export function activate(context: vscode.ExtensionContext): void {
         await vscode.commands.executeCommand('auditAssistant.indexWorkspace');
       }
       if (index.stats.files === 0) {
-        vscode.window.showWarningMessage('Audit: 索引为空，无法扫描 source/sink');
+        vscode.window.showWarningMessage('Audit: Index is empty; cannot scan for source/sink');
         return;
       }
       const compiled = compileRules(TAINT_RULES);
       const now = new Date().toISOString();
       const candidates = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'Audit: 扫描 Source/Sink 候选', cancellable: true },
+        { location: vscode.ProgressLocation.Notification, title: 'Audit: Scanning Source/Sink candidates', cancellable: true },
         async (progress, token) => {
           const files = index.allFiles();
           const found: Mark[] = [];
@@ -317,7 +317,7 @@ export function activate(context: vscode.ExtensionContext): void {
               const lines = Buffer.from(bytes).toString('utf8').split(/\r?\n/);
               found.push(...scanFile({ file: fi.file, languageId: fi.languageId, lines, calls: fi.calls, symbols: fi.symbols }, compiled, now));
             } catch (e) {
-              output.appendLine(`[taint] ${fi.file} 扫描失败: ${e}`);
+              output.appendLine(`[taint] ${fi.file} scan failed: ${e}`);
             }
             done++;
             if (done % 25 === 0 || done === files.length) {
@@ -332,7 +332,7 @@ export function activate(context: vscode.ExtensionContext): void {
       refreshMarks();
       const newCandidates = candidates.filter((c) => merged.some((m) => m.id === c.id && m.status === 'candidate')).length;
       vscode.window.showInformationMessage(
-        `Audit: 扫描完成 — 命中 ${candidates.length} 个候选（当前候选 ${newCandidates} 个待复核）。可在编辑器右键或 CodeLens 上确认/排除。`,
+        `Audit: Scan complete — ${candidates.length} candidates matched (${newCandidates} candidates awaiting review). Confirm/exclude via editor right-click or CodeLens.`,
       );
       vscode.commands.executeCommand('auditSourceSink.focus');
     }),
@@ -356,13 +356,13 @@ export function activate(context: vscode.ExtensionContext): void {
       const marks = store.loadMarks();
       const sink = id ? marks.find((m) => m.id === id) : marks.find((m) => m.kind === 'sink');
       if (!sink || sink.kind !== 'sink') {
-        vscode.window.showWarningMessage('Audit: 请在 Sink 标记上执行调用链确认（先扫描或手动标记 Sink）');
+        vscode.window.showWarningMessage('Audit: Run call-chain verification on a Sink mark (scan or manually mark a Sink first)');
         return;
       }
       const llmCfg = await getLlmConfig(context);
       if (!llmCfg.model) {
-        const pick = await vscode.window.showWarningMessage('Audit: 调用链确认需要配置 LLM 端点/模型', '打开设置');
-        if (pick === '打开设置') {
+        const pick = await vscode.window.showWarningMessage('Audit: Call-chain verification requires an LLM endpoint/model', 'Open Settings');
+        if (pick === 'Open Settings') {
           vscode.commands.executeCommand('workbench.action.openSettings', 'auditAssistant.llm');
         }
         return;
@@ -374,20 +374,20 @@ export function activate(context: vscode.ExtensionContext): void {
       const sourceMarks = marks.filter((m) => m.kind === 'source');
       const candidates = searchChainsFromSink(index, sink.file, sink.line, { sourceMarks });
       if (!candidates.length) {
-        vscode.window.showInformationMessage('Audit: 未搜索到通向该 Sink 的调用链候选');
+        vscode.window.showInformationMessage('Audit: No candidate call chains found leading to this Sink');
         return;
       }
 
-      // 多条候选时让用户选一条（默认最高分）
+      // With multiple candidates, let the user pick one (default to the highest score)
       let chosen = candidates[0];
       if (candidates.length > 1) {
         const items = candidates.map((c, i) => ({
           label: `${c.hops[0].name} → … → ${c.hops[c.hops.length - 1].name}`,
-          description: `${c.hops.length} 跳 · ${c.reachedSourceMarkId ? '命中 Source' : c.entryReason ?? ''} · 评分 ${c.score}`,
+          description: `${c.hops.length} hops · ${c.reachedSourceMarkId ? 'reaches Source' : c.entryReason ?? ''} · score ${c.score}`,
           detail: c.hops.map((h) => h.name).join(' → '),
           index: i,
         }));
-        const picked = await vscode.window.showQuickPick(items, { title: `选择要验证的调用链（共 ${candidates.length} 条候选）` });
+        const picked = await vscode.window.showQuickPick(items, { title: `Select a call chain to verify (${candidates.length} candidates)` });
         if (!picked) {
           return;
         }
@@ -399,7 +399,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const client = createLlmProvider(llmCfg);
       try {
         const finding = await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Audit: LLM 验证调用链', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: 'Audit: LLM verifying call chain', cancellable: false },
           () =>
             verifyChain(index, client, readFileRel, chosen, sink, source, {
               author: settings.author,
@@ -408,14 +408,13 @@ export function activate(context: vscode.ExtensionContext): void {
         );
         store.saveFinding(finding);
         findingsTree.refresh();
-        output.appendLine(`[verify] ${finding.title} — ${finding.chain.length} 跳`);
+        output.appendLine(`[verify] ${finding.title} — ${finding.chain.length} hops`);
         vscode.commands.executeCommand('auditFindings.focus');
-        const verdictCn = finding.verdict === 'reachable' ? '可达' : finding.verdict === 'unreachable' ? '不可达' : '待定';
-        vscode.window.showInformationMessage(`Audit: 调用链结论 — ${verdictCn}。已存入 .audit/findings/`);
+        vscode.window.showInformationMessage(`Audit: Call-chain verdict — ${finding.verdict}. Saved to .audit/findings/`);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        output.appendLine(`[verify] 失败: ${msg}`);
-        vscode.window.showErrorMessage(`Audit: 调用链验证失败：${msg}`);
+        output.appendLine(`[verify] failed: ${msg}`);
+        vscode.window.showErrorMessage(`Audit: Call-chain verification failed: ${msg}`);
       }
     }),
 
@@ -439,7 +438,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: 'Audit: 索引项目',
+          title: 'Audit: Indexing workspace',
           cancellable: true,
         },
         async (progress, token) => {
@@ -454,7 +453,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 await index.indexFile(relPathOf(uri), Buffer.from(bytes).toString('utf8'));
               }
             } catch (e) {
-              output.appendLine(`[index] ${uri.fsPath} 失败: ${e}`);
+              output.appendLine(`[index] ${uri.fsPath} failed: ${e}`);
             }
             done++;
             if (done % 20 === 0 || done === uris.length) {
@@ -469,12 +468,12 @@ export function activate(context: vscode.ExtensionContext): void {
       indexCache?.save(index.allFiles());
       const s = index.stats;
       vscode.window.showInformationMessage(
-        `Audit: 索引完成 — ${s.files} 个文件，${s.symbols} 个符号，${s.calls} 个调用点`,
+        `Audit: Indexing complete — ${s.files} files, ${s.symbols} symbols, ${s.calls} call sites`,
       );
     }),
   );
 
-  // ---------- 事件 ----------
+  // ---------- Events ----------
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor((editor) => {

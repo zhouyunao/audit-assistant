@@ -40,7 +40,7 @@ test('javascript: functions, arrow assignments, classes, calls', async () => {
   for (const c of ['readInput', 'query', 'handler', 'Service']) {
     assert.ok(callees(fi).includes(c), `missing call ${c}`);
   }
-  // 调用点归属：db.query 发生在 handler 内
+  // call-site attribution: db.query happens inside handler
   const queryCall = fi.calls.find((c) => c.callee === 'query');
   assert.match(queryCall.fromSymbol, /#handler@/);
 });
@@ -216,6 +216,6 @@ test('splitChunks: covers all lines contiguously and breaks at symbols', () => {
 
 test('tryParseJson: fences and surrounding prose', () => {
   assert.deepEqual(tryParseJson('```json\n{"a":1}\n```'), { a: 1 });
-  assert.deepEqual(tryParseJson('结果如下：\n{"a": {"b": 2}}\n以上。'), { a: { b: 2 } });
+  assert.deepEqual(tryParseJson('Here is the result:\n{"a": {"b": 2}}\nThat is all.'), { a: { b: 2 } });
   assert.equal(tryParseJson('not json at all'), undefined);
 });

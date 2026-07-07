@@ -1,4 +1,4 @@
-// 把 tree-sitter 运行时和各语言 grammar 的 wasm 拷贝到 grammars/，随扩展打包。
+// Copy the tree-sitter runtime and per-language grammar wasm files into grammars/, bundled with the extension.
 const fs = require('fs');
 const path = require('path');
 
@@ -31,7 +31,7 @@ for (const name of grammars) {
   copied++;
 }
 
-// web-tree-sitter 的运行时 wasm
+// web-tree-sitter runtime wasm
 const runtime = path.join(root, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm');
 fs.copyFileSync(runtime, path.join(outDir, 'tree-sitter.wasm'));
 

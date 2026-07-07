@@ -1,56 +1,56 @@
-// 跨模块共享的数据模型。.audit/ 目录中的落盘格式也以此为准。
+// Data models shared across modules. Also the on-disk format for the .audit/ directory.
 
-/** 索引出的符号（函数/方法/类） */
+/** An indexed symbol (function/method/class) */
 export interface SymbolInfo {
-  /** 唯一 id：<relPath>#<name>@<startLine> */
+  /** Unique id: <relPath>#<name>@<startLine> */
   id: string;
   name: string;
   kind: 'function' | 'method' | 'class';
-  /** 所属类/容器名（如有） */
+  /** Enclosing class/container name (if any) */
   container?: string;
   file: string;
   /** 0-based */
   startLine: number;
   endLine: number;
-  /** 参数列表原文（截断），帮助 LLM/人识别重载 */
+  /** Parameter list text (truncated), helps LLM/humans distinguish overloads */
   signature?: string;
 }
 
-/** 索引出的调用点 */
+/** An indexed call site */
 export interface CallSite {
-  /** 被调名（近似，如 exec、query） */
+  /** Callee name (approximate, e.g. exec, query) */
   callee: string;
-  /** 0-based 行号 */
+  /** 0-based line number */
   line: number;
   file: string;
-  /** 发起调用的符号 id（顶层代码则为 undefined） */
+  /** Id of the symbol making the call (undefined for top-level code) */
   fromSymbol?: string;
-  /** 调用点原文（截断） */
+  /** Call-site text (truncated) */
   text?: string;
 }
 
-/** 单文件索引结果 */
+/** Per-file index result */
 export interface FileIndex {
   file: string;
   contentHash: string;
   languageId: string;
-  /** 文件总行数（LOC） */
+  /** Total line count (LOC) */
   lines: number;
   symbols: SymbolInfo[];
   calls: CallSite[];
-  /** 原始 import 目标（模块路径/包名，未解析） */
+  /** Raw import targets (module paths/package names, unresolved) */
   imports: string[];
 }
 
-// ---------- 项目结构图（.audit/architecture.json） ----------
+// ---------- Project structure (.audit/architecture.json) ----------
 
 export interface ArchModule {
   name: string;
   fileCount: number;
-  /** 模块内代码总行数 */
+  /** Total lines of code in the module */
   loc: number;
   description?: string;
-  /** 代表文件（跳转用） */
+  /** Representative files (for navigation) */
   sampleFiles: string[];
 }
 
@@ -66,26 +66,26 @@ export interface Architecture {
   overview?: string;
   modules: ArchModule[];
   edges: ArchEdge[];
-  /** 带注释的纯文本目录树 */
+  /** Annotated plain-text directory tree */
   tree: string;
 }
 
-// ---------- 文件分析（.audit/files/<hash>.json） ----------
+// ---------- File analysis (.audit/files/<hash>.json) ----------
 
 export interface FunctionSummary {
   name: string;
-  /** 1-based，锚定后的行号 */
+  /** 1-based, anchored line number */
   line: number;
   description: string;
 }
 
 export interface IssueFinding {
   title: string;
-  /** 如 CWE-89，可为空 */
+  /** e.g. CWE-89, may be empty */
   cwe?: string;
   severity: 'high' | 'medium' | 'low';
   confidence: 'high' | 'medium' | 'low';
-  /** 1-based 闭区间 */
+  /** 1-based, inclusive range */
   startLine: number;
   endLine: number;
   reason: string;
@@ -99,7 +99,7 @@ export interface AttentionSpan {
 }
 
 export interface FileAnalysis {
-  /** 相对工作区根的路径（/ 分隔） */
+  /** Path relative to the workspace root (/ separated) */
   path: string;
   contentHash: string;
   analyzedAt: string;
@@ -111,19 +111,19 @@ export interface FileAnalysis {
   attention: AttentionSpan[];
 }
 
-// ---------- source/sink 标记（.audit/marks.json，M5 使用，先定格式） ----------
+// ---------- source/sink marks (.audit/marks.json) ----------
 
 export interface Mark {
   id: string;
   kind: 'source' | 'sink';
   status: 'candidate' | 'confirmed' | 'excluded';
-  /** 候选来自规则扫描，manual 为人工标记（人工标记不会被重扫清除） */
+  /** Candidates come from rule scanning; `manual` are hand-marked (never removed by re-scan) */
   origin: 'scan' | 'manual';
   file: string;
   symbol?: string;
   /** 1-based */
   line: number;
-  /** 命中的调用名或文本（供人快速识别） */
+  /** Matched call name or text (for quick human identification) */
   anchor?: string;
   category?: string;
   cwe?: string;
@@ -133,7 +133,7 @@ export interface Mark {
   time: string;
 }
 
-// ---------- 调用链结论（.audit/findings/<id>.json，M6 使用，先定格式） ----------
+// ---------- Call-chain findings (.audit/findings/<id>.json) ----------
 
 export interface ChainHop {
   file: string;

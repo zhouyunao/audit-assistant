@@ -1,7 +1,7 @@
 {
   "name": "audit-assistant",
   "displayName": "Audit Assistant",
-  "description": "LLM 辅助的多语言代码安全审计：项目结构图、文件功能总结与漏洞初筛、source/sink 标记与调用链确认，结果保存在 .audit/ 目录与团队共享",
+  "description": "LLM-assisted multi-language code security auditing: project structure tree, per-file summary & vulnerability triage, source/sink marking and call-chain verification. Results are stored in .audit/ and shared with the team.",
   "version": "0.1.0",
   "publisher": "audit-team",
   "private": true,
@@ -30,7 +30,7 @@
       "auditAssistant": [
         {
           "id": "auditFileAnalysis",
-          "name": "文件分析",
+          "name": "File Analysis",
           "icon": "media/icon.svg"
         },
         {
@@ -40,7 +40,7 @@
         },
         {
           "id": "auditFindings",
-          "name": "调用链结论",
+          "name": "Call Chains",
           "icon": "media/icon.svg"
         }
       ]
@@ -48,116 +48,116 @@
     "viewsWelcome": [
       {
         "view": "auditFileAnalysis",
-        "contents": "打开一个代码文件后，点击下方按钮进行分析。\n[分析当前文件](command:auditAssistant.analyzeCurrentFile)\n首次使用请先设置 LLM 端点：\n[设置 API Key](command:auditAssistant.setApiKey)"
+        "contents": "Open a code file, then click below to analyze it.\n[Analyze Current File](command:auditAssistant.analyzeCurrentFile)\nFirst time? Configure the LLM endpoint:\n[Set API Key](command:auditAssistant.setApiKey)"
       },
       {
         "view": "auditSourceSink",
-        "contents": "还没有 source/sink 标记。\n[扫描 Source/Sink 候选](command:auditAssistant.scanTaint)\n或在编辑器中右键「标记为 Source/Sink」手动标记。"
+        "contents": "No source/sink marks yet.\n[Scan Source/Sink Candidates](command:auditAssistant.scanTaint)\nOr right-click in the editor and choose \"Mark as Source/Sink\" to mark manually."
       },
       {
         "view": "auditFindings",
-        "contents": "还没有调用链结论。\n在「Source / Sink」视图的 Sink 条目上点「确认调用链」，或在 Sink 行的 CodeLens 上点「确认调用链」即可生成。"
+        "contents": "No call-chain findings yet.\nClick \"Verify Call Chain\" on a Sink item in the \"Source / Sink\" view, or on the CodeLens above a Sink line."
       }
     ],
     "commands": [
       {
         "command": "auditAssistant.setApiKey",
-        "title": "设置 LLM API Key",
+        "title": "Set LLM API Key",
         "category": "Audit"
       },
       {
         "command": "auditAssistant.indexWorkspace",
-        "title": "索引整个项目",
+        "title": "Index Workspace",
         "category": "Audit"
       },
       {
         "command": "auditAssistant.analyzeCurrentFile",
-        "title": "分析当前文件",
+        "title": "Analyze Current File",
         "category": "Audit",
         "icon": "$(sparkle)"
       },
       {
         "command": "auditAssistant.refreshAnalysisView",
-        "title": "刷新",
+        "title": "Refresh",
         "category": "Audit",
         "icon": "$(refresh)"
       },
       {
         "command": "auditAssistant.generateArchitecture",
-        "title": "生成项目结构树",
+        "title": "Generate Structure Tree",
         "category": "Audit"
       },
       {
         "command": "auditAssistant.showArchitecture",
-        "title": "查看项目结构树",
+        "title": "Show Structure Tree",
         "category": "Audit"
       },
       {
         "command": "auditAssistant.openIndexCache",
-        "title": "打开索引缓存位置",
+        "title": "Reveal Index Cache Location",
         "category": "Audit"
       },
       {
         "command": "auditAssistant.scanTaint",
-        "title": "扫描 Source/Sink 候选",
+        "title": "Scan Source/Sink Candidates",
         "category": "Audit",
         "icon": "$(search)"
       },
       {
         "command": "auditAssistant.markAsSource",
-        "title": "标记为 Source",
+        "title": "Mark as Source",
         "category": "Audit"
       },
       {
         "command": "auditAssistant.markAsSink",
-        "title": "标记为 Sink",
+        "title": "Mark as Sink",
         "category": "Audit"
       },
       {
         "command": "auditAssistant.confirmMark",
-        "title": "确认标记",
+        "title": "Confirm Mark",
         "category": "Audit",
         "icon": "$(check)"
       },
       {
         "command": "auditAssistant.excludeMark",
-        "title": "排除标记",
+        "title": "Exclude Mark",
         "category": "Audit",
         "icon": "$(circle-slash)"
       },
       {
         "command": "auditAssistant.restoreMark",
-        "title": "恢复为候选",
+        "title": "Restore to Candidate",
         "category": "Audit",
         "icon": "$(history)"
       },
       {
         "command": "auditAssistant.deleteMark",
-        "title": "删除标记",
+        "title": "Delete Mark",
         "category": "Audit",
         "icon": "$(trash)"
       },
       {
         "command": "auditAssistant.refreshSourceSink",
-        "title": "刷新",
+        "title": "Refresh",
         "category": "Audit",
         "icon": "$(refresh)"
       },
       {
         "command": "auditAssistant.verifyChain",
-        "title": "确认调用链",
+        "title": "Verify Call Chain",
         "category": "Audit",
         "icon": "$(git-compare)"
       },
       {
         "command": "auditAssistant.deleteFinding",
-        "title": "删除结论",
+        "title": "Delete Finding",
         "category": "Audit",
         "icon": "$(trash)"
       },
       {
         "command": "auditAssistant.refreshFindings",
-        "title": "刷新",
+        "title": "Refresh",
         "category": "Audit",
         "icon": "$(refresh)"
       }
@@ -249,50 +249,56 @@
             "opencode"
           ],
           "enumDescriptions": [
-            "OpenAI 兼容端点（vLLM / Ollama / OneAPI / 各云厂商）",
-            "opencode serve 会话式 API（需先运行 opencode serve）"
+            "OpenAI-compatible endpoint (vLLM / Ollama / OneAPI / cloud providers)",
+            "opencode serve session-based API (requires a running `opencode serve`)"
           ],
           "default": "openai",
-          "description": "LLM 后端类型。openai=OpenAI 兼容 /chat/completions；opencode=opencode serve 的会话式 API。"
+          "description": "LLM backend type. openai = OpenAI-compatible /chat/completions; opencode = opencode serve session-based API."
         },
         "auditAssistant.llm.baseUrl": {
           "type": "string",
           "default": "http://localhost:11434/v1",
-          "description": "端点 Base URL。openai 形如 http://内网host:8000/v1；opencode 形如 http://127.0.0.1:4096（opencode 时若保持默认值会自动切到该地址）。鉴权凭据通过命令「Audit: 设置 LLM API Key」保存在 VSCode SecretStorage，不会写入设置文件。"
+          "description": "Endpoint base URL. openai: e.g. http://host:8000/v1; opencode: e.g. http://127.0.0.1:4096 (when provider is opencode and this is left at the default, it auto-switches to that address). Auth credentials are stored in VSCode SecretStorage via the \"Audit: Set LLM API Key\" command and never written to settings."
         },
         "auditAssistant.llm.model": {
           "type": "string",
           "default": "",
-          "description": "openai：模型名（传给 /chat/completions 的 model）。opencode：providerID/modelID，如 anthropic/claude-3-5-sonnet-20241022。"
+          "description": "openai: model name (passed as `model` to /chat/completions). opencode: providerID/modelID, e.g. anthropic/claude-3-5-sonnet-20241022."
         },
         "auditAssistant.llm.opencode.agent": {
           "type": "string",
           "default": "",
-          "description": "（仅 opencode）可选的 agent 名，留空用默认 agent。"
+          "description": "(opencode only) Optional agent name; leave empty to use the default agent."
         },
         "auditAssistant.llm.temperature": {
           "type": "number",
           "default": 0.2,
-          "description": "采样温度，审计场景建议低温"
+          "description": "Sampling temperature. A low value is recommended for auditing."
         },
         "auditAssistant.llm.maxTokens": {
           "type": "number",
           "default": 4096,
-          "description": "单次回复的最大 token 数"
+          "description": "Maximum number of tokens per response."
         },
         "auditAssistant.llm.timeoutMs": {
           "type": "number",
           "default": 180000,
-          "description": "单次请求超时（毫秒）"
+          "description": "Per-request timeout in milliseconds."
         },
         "auditAssistant.analysis.outputLanguage": {
           "type": "string",
           "enum": [
+            "en",
             "zh",
-            "en"
+            "ja"
           ],
-          "default": "zh",
-          "description": "分析结果的输出语言"
+          "enumDescriptions": [
+            "English",
+            "Simplified Chinese (简体中文)",
+            "Japanese (日本語)"
+          ],
+          "default": "en",
+          "description": "Language for analysis results produced by the LLM."
         },
         "auditAssistant.index.exclude": {
           "type": "array",
@@ -310,12 +316,12 @@
             "**/.audit/**",
             "**/*.min.js"
           ],
-          "description": "索引时排除的 glob"
+          "description": "Glob patterns to exclude during indexing."
         },
         "auditAssistant.author": {
           "type": "string",
           "default": "",
-          "description": "写入标记/结论的审计人名字，留空则使用系统用户名"
+          "description": "Auditor name recorded on marks/findings. Leave empty to use the system username."
         }
       }
     }

@@ -1,5 +1,5 @@
-// 验证 esbuild 打包后的 web-tree-sitter 能正常初始化（回归 import.meta.url 打包问题）。
-// 用与 dist 相同的 esbuild 配置打包一个使用 ParserPool 的入口，然后在纯 Node 里运行。
+// Verify that esbuild-bundled web-tree-sitter initializes correctly (regression for the import.meta.url bundling issue).
+// Bundle an entry that uses ParserPool with the same esbuild config as dist, then run it in plain Node.
 const esbuild = require('esbuild');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -30,7 +30,7 @@ run().catch((e) => { console.error(e); process.exit(1); });
 `,
   );
 
-  // 与 esbuild.js 保持一致的关键配置
+  // key config kept in sync with esbuild.js
   await esbuild.build({
     entryPoints: [entry],
     bundle: true,

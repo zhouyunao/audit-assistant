@@ -20,6 +20,11 @@ interface RawVerdict {
 
 const MAX_FUNC_CHARS = 6000;
 
+/** Human-readable name of the requested output language. */
+function languageName(outputLanguage: string): string {
+  return outputLanguage === 'zh' ? 'Simplified Chinese' : outputLanguage === 'ja' ? 'Japanese' : 'English';
+}
+
 function sliceFunctionSource(lines: string[], sym: SymbolInfo | undefined, fallbackLine: number): string {
   const start = sym ? sym.startLine : Math.max(0, fallbackLine - 4);
   const end = sym ? sym.endLine : Math.min(lines.length - 1, fallbackLine + 4);
@@ -27,24 +32,24 @@ function sliceFunctionSource(lines: string[], sym: SymbolInfo | undefined, fallb
     .slice(start, end + 1)
     .map((l, i) => `${String(start + i + 1).padStart(5)}| ${l}`)
     .join('\n');
-  return body.length > MAX_FUNC_CHARS ? body.slice(0, MAX_FUNC_CHARS) + '\n… (截断)' : body;
+  return body.length > MAX_FUNC_CHARS ? body.slice(0, MAX_FUNC_CHARS) + '\n… (truncated)' : body;
 }
 
 function systemPrompt(outputLanguage: string): string {
-  const lang = outputLanguage === 'en' ? 'English' : '简体中文';
+  const lang = languageName(outputLanguage);
   return [
-    '你是资深代码安全审计专家，正在验证一条“污点从 source/入口 流向 sink”的候选调用链。',
-    '候选链由静态近似分析（名称匹配）得出，可能不精确：调用关系可能是同名误配，或中途已有校验/净化。',
-    '请沿链逐跳核对：数据是否真的从上一跳传入下一跳、有无过滤/转义/参数化/白名单等净化，最终到达 sink 时是否仍然可控。',
-    '需要更多上下文时可调用工具 read_function / get_callers / search_text（例如静态链断开、疑似反射或框架路由时）。',
-    '完成后只输出一个 JSON 对象，不要输出其他文字：',
+    'You are a senior code-security auditor verifying a candidate call chain along which taint flows from a source/entry to a sink.',
+    'The candidate chain comes from approximate static analysis (name matching) and may be imprecise: a call edge could be a same-name mismatch, or the data could already be validated/sanitized along the way.',
+    'Check hop by hop: does data really pass from the previous hop into the next, is there any filtering/escaping/parameterization/allow-listing, and is it still attacker-controlled when it reaches the sink?',
+    'When you need more context, call the tools read_function / get_callers / search_text (e.g. when the static chain is broken, or you suspect reflection or framework routing).',
+    'When done, output only a single JSON object, with no other text:',
     '{',
     '  "verdict": "reachable | unreachable | undetermined",',
-    '  "analysis": "结论依据，说明关键的净化点或可控点",',
-    '  "hops": [{"file": "路径", "symbol": "函数名", "line": 行号, "evidence": "该跳的关键代码事实"}]',
+    '  "analysis": "your reasoning, noting the key sanitization or controllable points",',
+    '  "hops": [{"file": "path", "symbol": "function name", "line": number, "evidence": "the key code fact for this hop"}]',
     '}',
-    'verdict 含义：reachable=污点确实可达且未被有效净化；unreachable=不可达或已被净化；undetermined=证据不足。',
-    `所有说明文字使用${lang}。`,
+    'verdict meaning: reachable = taint truly reaches the sink without effective sanitization; unreachable = not reachable or already sanitized; undetermined = insufficient evidence.',
+    `Write all prose in ${lang}.`,
   ].join('\n');
 }
 
@@ -58,8 +63,8 @@ function buildTools(index: ProjectIndex, readFile: FileReader): AgentTool[] {
     {
       def: def(
         'read_function',
-        '读取指定文件中某个函数/方法的源码（带行号）',
-        { file: { type: 'string' }, name: { type: 'string', description: '函数或方法名' } },
+        'Read the source code (with line numbers) of a function/method in a given file',
+        { file: { type: 'string' }, name: { type: 'string', description: 'function or method name' } },
         ['file', 'name'],
       ),
       run: async (args) => {
@@ -68,32 +73,32 @@ function buildTools(index: ProjectIndex, readFile: FileReader): AgentTool[] {
         const fi = index.getFile(file);
         const sym = fi?.symbols.find((s) => s.name === name) ?? index.symbolsByName(name, file)[0];
         if (!sym) {
-          return `未找到符号 ${name}`;
+          return `Symbol ${name} not found`;
         }
         const content = await readFile(sym.file);
         if (content === undefined) {
-          return `无法读取文件 ${sym.file}`;
+          return `Cannot read file ${sym.file}`;
         }
         return sliceFunctionSource(content.split(/\r?\n/), sym, sym.startLine);
       },
     },
     {
-      def: def('get_callers', '查询哪些函数调用了指定名字的函数', { name: { type: 'string' } }, ['name']),
+      def: def('get_callers', 'Find which functions call a function with the given name', { name: { type: 'string' } }, ['name']),
       run: (args) => {
         const name = String(args.name ?? '');
         const callers = index.callersOf(name).slice(0, 30);
         if (!callers.length) {
-          return `没有找到 ${name} 的调用者（可能由框架/反射调用）`;
+          return `No callers found for ${name} (may be invoked by a framework/reflection)`;
         }
         return JSON.stringify(
-          callers.map((c) => ({ file: c.file, line: c.line + 1, caller: c.fromSymbol ? index.symbolById(c.fromSymbol)?.name : '(顶层)' })),
+          callers.map((c) => ({ file: c.file, line: c.line + 1, caller: c.fromSymbol ? index.symbolById(c.fromSymbol)?.name : '(top level)' })),
         );
       },
     },
     {
       def: def(
         'search_text',
-        '在项目中按字符串全文检索（用于反射/路由注册等静态图断开处），返回命中位置',
+        'Full-text search the project for a string (for reflection/route-registration and other places the static graph is broken); returns matching locations',
         { query: { type: 'string' }, maxResults: { type: 'number' } },
         ['query'],
       ),
@@ -101,7 +106,7 @@ function buildTools(index: ProjectIndex, readFile: FileReader): AgentTool[] {
         const query = String(args.query ?? '');
         const max = Math.min(Number(args.maxResults ?? 20) || 20, 50);
         if (!query) {
-          return '查询为空';
+          return 'Empty query';
         }
         const hits: string[] = [];
         for (const fi of index.allFiles()) {
@@ -119,7 +124,7 @@ function buildTools(index: ProjectIndex, readFile: FileReader): AgentTool[] {
             }
           }
         }
-        return hits.length ? hits.join('\n') : `未找到 "${query}"`;
+        return hits.length ? hits.join('\n') : `"${query}" not found`;
       },
     },
   ];
@@ -134,8 +139,9 @@ function normalizeVerdict(v: string | undefined): Finding['verdict'] {
 }
 
 /**
- * 用 LLM 逐跳验证一条候选链，产出 Finding。会把每一跳的函数源码预先喂进 prompt，
- * 因此即使端点不支持 tool-calling 也能给出结论；支持工具时模型可自行补充上下文。
+ * Verify a candidate chain hop by hop with the LLM and produce a Finding. Each hop's function
+ * source is pre-fed into the prompt, so a conclusion is produced even when the endpoint doesn't
+ * support tool-calling; when tools are supported, the model can gather extra context itself.
  */
 export async function verifyChain(
   index: ProjectIndex,
@@ -146,30 +152,30 @@ export async function verifyChain(
   source: Mark | undefined,
   opts: VerifyOptions,
 ): Promise<Finding> {
-  // 预取每一跳的函数源码
+  // Pre-fetch each hop's function source
   const hopSources: string[] = [];
   for (const hop of candidate.hops) {
     const sym = hop.symbolId ? index.symbolById(hop.symbolId) : undefined;
     const content = await readFile(hop.file);
-    const src = content ? sliceFunctionSource(content.split(/\r?\n/), sym, hop.line) : '（无法读取源码）';
+    const src = content ? sliceFunctionSource(content.split(/\r?\n/), sym, hop.line) : '(source unavailable)';
     hopSources.push(`### ${hop.name}  (${hop.file}:${hop.line})\n${src}`);
   }
 
   const entry = candidate.reachedSourceMarkId
-    ? `Source 标记：${source ? `${source.file}:${source.line}` : candidate.reachedSourceMarkId}`
-    : `入口：${candidate.entryReason ?? '未知'}`;
+    ? `Source mark: ${source ? `${source.file}:${source.line}` : candidate.reachedSourceMarkId}`
+    : `Entry: ${candidate.entryReason ?? 'unknown'}`;
 
   const user = [
-    `Sink：${sink.file}:${sink.line}${sink.category ? `（${sink.category}${sink.cwe ? ' ' + sink.cwe : ''}）` : ''}`,
+    `Sink: ${sink.file}:${sink.line}${sink.category ? ` (${sink.category}${sink.cwe ? ' ' + sink.cwe : ''})` : ''}`,
     entry,
     '',
-    '候选调用链（入口 → sink）：',
+    'Candidate call chain (entry -> sink):',
     chainText(candidate.hops),
     '',
-    '各跳源码：',
+    'Source of each hop:',
     ...hopSources,
     '',
-    '请逐跳核对污点是否真实可达并输出 JSON 结论。',
+    'Verify hop by hop whether the taint is truly reachable and output a JSON conclusion.',
   ].join('\n');
 
   const seed = [
@@ -191,11 +197,10 @@ export async function verifyChain(
       : candidate.hops.map((h) => ({ file: h.file, symbol: h.name, line: h.line, evidence: '' }));
 
   const verdict = normalizeVerdict(raw.verdict);
-  const verdictCn = verdict === 'reachable' ? '可达' : verdict === 'unreachable' ? '不可达' : '待定';
 
   return {
     id: `f-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    title: `${sink.category ?? 'sink'} @ ${sink.file.split('/').pop()}:${sink.line} · ${verdictCn}`,
+    title: `${sink.category ?? 'sink'} @ ${sink.file.split('/').pop()}:${sink.line} · ${verdict}`,
     sourceMarkId: source?.id ?? candidate.reachedSourceMarkId,
     sinkMarkId: sink.id,
     chain,

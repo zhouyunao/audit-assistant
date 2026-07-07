@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { FileIndex } from '../types';
 
-// v3: FileIndex 增加 lines 字段
+// v3: FileIndex gained the `lines` field
 const CACHE_VERSION = 3;
 
 interface CacheFile {
@@ -10,7 +10,7 @@ interface CacheFile {
   entries: FileIndex[];
 }
 
-/** 索引的持久化缓存（存放在扩展 globalStorage，按工作区一个文件） */
+/** Persistent index cache (stored in the extension's globalStorage, one file per workspace). */
 export class IndexCache {
   constructor(readonly filePath: string) {}
 

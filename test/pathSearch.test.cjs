@@ -23,7 +23,7 @@ async function buildIndex() {
 
 test('reverse search reaches source across files', async () => {
   const index = await buildIndex();
-  const sinkLine = 2; // db.query 行（1-based）
+  const sinkLine = 2; // db.query line (1-based)
   const sourceMarks = [{ id: 'src1', kind: 'source', status: 'candidate', file: 'routes.js', line: 2 }];
   const chains = searchChainsFromSink(index, 'dao.js', sinkLine, { sourceMarks });
 
@@ -32,7 +32,7 @@ test('reverse search reaches source across files', async () => {
   const names = best.hops.map((h) => h.name);
   assert.deepEqual(names, ['handler', 'service', 'dao'], 'entry→sink order');
   assert.equal(best.reachedSourceMarkId, 'src1', 'source mark detected');
-  // sink 跳锚定到 sink 行
+  // the sink hop is anchored to the sink line
   assert.equal(best.hops[best.hops.length - 1].line, sinkLine);
 });
 

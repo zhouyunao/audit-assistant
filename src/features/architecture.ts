@@ -5,10 +5,11 @@ import { AuditStore } from '../store/auditStore';
 import { Architecture, ArchEdge, ArchModule, FileIndex } from '../types';
 
 const MAX_MODULES = 24;
-const OTHER = '(其他)';
+const OTHER = '(other)';
 
 /**
- * 文件级依赖边：import 解析 + 跨文件调用（名称匹配，定义方 ≤3 个才计边以降噪）。
+ * File-level dependency edges: import resolution + cross-file calls (name-matched; only count an
+ * edge when there are <=3 definitions, to reduce noise).
  */
 export function buildFileEdges(files: FileIndex[], index: ProjectIndex): Map<string, Map<string, number>> {
   const allFiles = new Set(files.map((f) => f.file));
@@ -46,8 +47,9 @@ export function buildFileEdges(files: FileIndex[], index: ProjectIndex): Map<str
 }
 
 /**
- * 模块归属：默认取顶层目录；若某个顶层目录（如 src/）占了一半以上文件且有子目录，
- * 则对它下钻一层，让图更有信息量。
+ * Module assignment: default to the top-level directory; if one top-level directory (e.g. src/)
+ * holds more than half the files and has subdirectories, drill one level deeper for a more
+ * informative graph.
  */
 export function makeModuleAssigner(files: string[]): (file: string) => string {
   const topCount = new Map<string, number>();
@@ -86,7 +88,7 @@ export interface ModuleGraph {
 export function buildModuleGraph(files: FileIndex[], index: ProjectIndex): ModuleGraph {
   const assignRaw = makeModuleAssigner(files.map((f) => f.file));
 
-  // 模块 -> 文件（按符号数排序取代表文件）
+  // module -> files (pick representative files by symbol count)
   const byModule = new Map<string, FileIndex[]>();
   for (const f of files) {
     const m = assignRaw(f.file);
@@ -153,14 +155,14 @@ export function buildModuleGraph(files: FileIndex[], index: ProjectIndex): Modul
 
 interface DirNode {
   name: string;
-  /** 相对路径（/ 分隔），根为 '' */
+  /** Relative path (/ separated), root is '' */
   path: string;
   fileCount: number;
   loc: number;
   children: Map<string, DirNode>;
 }
 
-/** 树渲染只需要路径和行数 */
+/** Tree rendering only needs the path and line count */
 export type TreeFile = Pick<FileIndex, 'file' | 'lines'>;
 
 function buildDirTree(files: TreeFile[]): DirNode {
@@ -195,7 +197,7 @@ const MAX_TREE_DEPTH = 3;
 const MAX_CHILDREN_SHOWN = 30;
 
 /**
- * 带注释的纯文本目录树：模块级目录附上职责描述与依赖去向。
+ * Annotated plain-text directory tree: module-level directories get a responsibility description and dependency targets.
  */
 export function renderTree(files: TreeFile[], modules: ArchModule[], edges: ArchEdge[], maxDepth = MAX_TREE_DEPTH): string {
   const byName = new Map(modules.map((m) => [m.name, m]));
@@ -205,23 +207,23 @@ export function renderTree(files: TreeFile[], modules: ArchModule[], edges: Arch
   }
 
   const annotate = (node: DirNode): string => {
-    let line = `${node.name}/ (${node.fileCount} 个文件, ${node.loc.toLocaleString('en-US')} 行)`;
+    let line = `${node.name}/ (${node.fileCount} files, ${node.loc.toLocaleString('en-US')} LOC)`;
     const mod = byName.get(node.path);
     if (mod?.description) {
       line += ` — ${mod.description}`;
     }
     const d = deps.get(node.path);
     if (d?.length) {
-      line += `  [依赖 → ${d.slice(0, 4).join(', ')}]`;
+      line += `  [depends on: ${d.slice(0, 4).join(', ')}]`;
     }
     return line;
   };
 
   const root = buildDirTree(files);
-  let rootLine = `./ (共 ${root.fileCount} 个文件, ${root.loc.toLocaleString('en-US')} 行)`;
+  let rootLine = `./ (${root.fileCount} files, ${root.loc.toLocaleString('en-US')} LOC total)`;
   const rootMod = byName.get('(root)');
   if (rootMod?.description) {
-    rootLine += ` — 根目录文件：${rootMod.description}`;
+    rootLine += ` — root files: ${rootMod.description}`;
   }
   const lines: string[] = [rootLine];
   const walk = (node: DirNode, prefix: string, depth: number) => {
@@ -237,7 +239,7 @@ export function renderTree(files: TreeFile[], modules: ArchModule[], edges: Arch
       }
     });
     if (children.length > MAX_CHILDREN_SHOWN) {
-      lines.push(`${prefix}└── … 其余 ${children.length - MAX_CHILDREN_SHOWN} 个目录`);
+      lines.push(`${prefix}└── … ${children.length - MAX_CHILDREN_SHOWN} more directories`);
     }
   };
   walk(root, '', 1);
@@ -249,7 +251,7 @@ interface RawAnnotation {
   modules?: Array<{ name?: string; description?: string }>;
 }
 
-/** 用 LLM 给模块标注一句话职责。失败/未配置时静默跳过，图照常可用。 */
+/** Use the LLM to annotate each module with a one-line responsibility. On failure/no-config it's silently skipped and the tree still works. */
 async function annotate(
   graph: ModuleGraph,
   files: FileIndex[],
@@ -257,7 +259,7 @@ async function annotate(
   client: LlmProvider,
   outputLanguage: string,
 ): Promise<{ overview?: string; byModule: Map<string, string> }> {
-  const lang = outputLanguage === 'en' ? 'English' : '简体中文';
+  const lang = outputLanguage === 'zh' ? 'Simplified Chinese' : outputLanguage === 'ja' ? 'Japanese' : 'English';
   const byFile = new Map(files.map((f) => [f.file, f]));
   const moduleDesc = graph.modules
     .filter((m) => m.name !== OTHER)
@@ -270,10 +272,10 @@ async function annotate(
         .filter(Boolean)
         .slice(0, 2);
       return [
-        `模块 ${m.name}（${m.fileCount} 个文件，${m.loc} 行）`,
-        `  代表文件: ${m.sampleFiles.slice(0, 5).join(', ')}`,
-        symbolNames.length ? `  主要符号: ${symbolNames.join(', ')}` : '',
-        ...summaries.map((s) => `  已有文件总结: ${s}`),
+        `Module ${m.name} (${m.fileCount} files, ${m.loc} LOC)`,
+        `  representative files: ${m.sampleFiles.slice(0, 5).join(', ')}`,
+        symbolNames.length ? `  main symbols: ${symbolNames.join(', ')}` : '',
+        ...summaries.map((s) => `  existing file summary: ${s}`),
       ]
         .filter(Boolean)
         .join('\n');
@@ -282,9 +284,9 @@ async function annotate(
 
   const raw = await client.completeJson<RawAnnotation>(
     [
-      '你是资深代码审计专家。根据模块的文件名和符号名推断每个模块的职责，输出 JSON：',
-      '{"overview": "项目整体是做什么的，2~3 句", "modules": [{"name": "模块名", "description": "该模块职责，一句话"}]}',
-      `说明文字使用${lang}。模块名必须与输入完全一致。没把握的模块可以省略。`,
+      'You are a senior code auditor. Infer each module\'s responsibility from its file names and symbol names, and output JSON:',
+      '{"overview": "what the project does overall, 2-3 sentences", "modules": [{"name": "module name", "description": "the module\'s responsibility in one line"}]}',
+      `Write prose in ${lang}. Module names must match the input exactly. Omit modules you are unsure about.`,
     ].join('\n'),
     moduleDesc,
   );
@@ -309,13 +311,13 @@ export async function generateArchitecture(
   opts: GenerateOptions,
 ): Promise<{ architecture: Architecture; llmError?: string }> {
   const files = index.allFiles();
-  opts.onProgress?.('聚合依赖关系…');
+  opts.onProgress?.('Aggregating dependencies…');
   const graph = buildModuleGraph(files, index);
 
   let overview: string | undefined;
   let llmError: string | undefined;
   if (client) {
-    opts.onProgress?.('LLM 标注模块职责…');
+    opts.onProgress?.('LLM annotating module responsibilities…');
     try {
       const ann = await annotate(graph, files, store, client, opts.outputLanguage);
       overview = ann.overview;

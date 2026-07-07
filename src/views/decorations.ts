@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { FileAnalysis } from '../types';
 
-/** 编辑器内的漏洞/注意点高亮。hover 显示理由与建议。 */
+/** In-editor highlighting of issues/attention points. Hover shows the reason and advice. */
 export class AnalysisDecorations implements vscode.Disposable {
   private readonly issueType = vscode.window.createTextEditorDecorationType({
     backgroundColor: new vscode.ThemeColor('inputValidation.errorBackground'),
@@ -30,13 +30,13 @@ export class AnalysisDecorations implements vscode.Disposable {
       range: toRange(i.startLine, i.endLine),
       hoverMessage: new vscode.MarkdownString(
         `$(shield) **${i.title}**${i.cwe ? ` \`${i.cwe}\`` : ''} — ${i.severity}/${i.confidence}\n\n` +
-          `${i.reason}${i.advice ? `\n\n**建议**：${i.advice}` : ''}`,
+          `${i.reason}${i.advice ? `\n\n**Advice**: ${i.advice}` : ''}`,
         true,
       ),
     }));
     const attention: vscode.DecorationOptions[] = analysis.attention.map((s) => ({
       range: toRange(s.startLine, s.endLine),
-      hoverMessage: new vscode.MarkdownString(`$(eye) **审计注意**：${s.note}`, true),
+      hoverMessage: new vscode.MarkdownString(`$(eye) **Audit attention**: ${s.note}`, true),
     }));
 
     editor.setDecorations(this.issueType, issues);

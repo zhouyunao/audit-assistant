@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { Mark } from '../types';
 
-/** 在编辑器左侧和 overview ruler 标示 source/sink 行。 */
+/** Mark source/sink lines in the editor's left border and overview ruler. */
 export class MarkDecorations implements vscode.Disposable {
   private readonly sink = vscode.window.createTextEditorDecorationType({
     borderWidth: '0 0 0 2px',

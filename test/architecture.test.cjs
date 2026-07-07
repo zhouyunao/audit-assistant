@@ -80,13 +80,13 @@ test('buildModuleGraph + renderTree: import and call edges aggregate to modules'
   assert.ok(edge.weight >= 2, 'two imports + one call edge should aggregate');
 
   const api = graph.modules.find((m) => m.name === 'src/api');
-  api.description = '对外 HTTP 接口';
-  assert.equal(api.loc, 3, 'src/api 两个文件共 3 行');
+  api.description = 'External HTTP interface';
+  assert.equal(api.loc, 3, 'src/api two files, 3 LOC total');
   const tree = renderTree(index.allFiles(), graph.modules, graph.edges);
-  assert.match(tree, /^\.\/ \(共 3 个文件, 4 行\)/);
-  assert.match(tree, /└── src\/ \(3 个文件, 4 行\)/);
-  assert.match(tree, /api\/ \(2 个文件, 3 行\) — 对外 HTTP 接口/);
-  assert.match(tree, /\[依赖 → src\/db\]/);
+  assert.match(tree, /^\.\/ \(3 files, 4 LOC total\)/);
+  assert.match(tree, /└── src\/ \(3 files, 4 LOC\)/);
+  assert.match(tree, /api\/ \(2 files, 3 LOC\) — External HTTP interface/);
+  assert.match(tree, /\[depends on: src\/db\]/);
 });
 
 test('renderTree: depth cap, child cap, LOC aggregation', () => {
@@ -95,8 +95,8 @@ test('renderTree: depth cap, child cap, LOC aggregation', () => {
     files.push({ file: `top/dir${d}/deep/deeper/deepest/f.js`, lines: 10 });
   }
   const tree = renderTree(files, [], [], 3);
-  assert.match(tree, /^\.\/ \(共 40 个文件, 400 行\)/);
-  assert.match(tree, /… 其余 10 个目录/);
+  assert.match(tree, /^\.\/ \(40 files, 400 LOC total\)/);
+  assert.match(tree, /… 10 more directories/);
   assert.ok(!tree.includes('deepest'), 'depth beyond cap should be elided');
-  assert.match(tree, /deep\/ \(1 个文件, 10 行\) …/);
+  assert.match(tree, /deep\/ \(1 files, 10 LOC\) …/);
 });

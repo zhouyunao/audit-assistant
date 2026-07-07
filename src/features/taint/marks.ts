@@ -1,6 +1,6 @@
 import { Mark, SymbolInfo } from '../../types';
 
-/** 标记 id 按位置定：同一 (kind, file, line) 唯一，人工标记与扫描候选可自然合并/升级 */
+/** Mark id is location-based: unique per (kind, file, line), so manual marks and scan candidates merge/upgrade naturally */
 export function markId(kind: 'source' | 'sink', file: string, line1: number): string {
   return `${kind}:${file}:${line1}`;
 }
@@ -16,7 +16,8 @@ export interface ManualMarkInput {
 }
 
 /**
- * 人工标记：若该位置已有扫描候选则升级为已确认（保留 category/cwe/ruleId），否则新建。
+ * Manual mark: if a scan candidate already exists at this location, upgrade it to confirmed
+ * (keeping category/cwe/ruleId); otherwise create a new one.
  */
 export function applyManualMark(existing: Mark[], input: ManualMarkInput, now: string): Mark {
   const id = markId(input.kind, input.file, input.line);

@@ -3,7 +3,7 @@ import { ProjectIndex, contentHash } from '../indexer/indexer';
 import { AuditStore } from '../store/auditStore';
 import { AttentionSpan, FileAnalysis, FunctionSummary, IssueFinding, SymbolInfo } from '../types';
 
-/** 单次请求携带的代码上限（字符）。超过则按符号边界分块。 */
+/** Max code per request (characters). Larger files are chunked at symbol boundaries. */
 const CHUNK_CHARS = 20000;
 
 interface RawFunction {
@@ -40,49 +40,49 @@ export interface AnalyzeOptions {
 }
 
 function systemPrompt(outputLanguage: string): string {
-  const lang = outputLanguage === 'en' ? 'English' : '简体中文';
+  const lang = outputLanguage === 'zh' ? 'Simplified Chinese' : outputLanguage === 'ja' ? 'Japanese' : 'English';
   return [
-    '你是资深的代码安全审计专家，正在辅助人工审计。你的输出必须是一个 JSON 对象，不要输出任何其他文字。',
-    'JSON 结构：',
+    'You are a senior code-security auditor assisting a human audit. Your output must be a single JSON object, with no other text.',
+    'JSON shape:',
     '{',
-    '  "summary": "该文件/代码段的整体功能说明，2~4 句",',
-    '  "functions": [{"name": "函数名", "line": 起始行号, "description": "一句话功能说明"}],',
-    '  "issues": [{"title": "问题标题", "cwe": "CWE-89（没有合适编号可留空）", "severity": "high|medium|low",',
+    '  "summary": "overall description of this file/snippet, 2-4 sentences",',
+    '  "functions": [{"name": "function name", "line": start line, "description": "one-line description of what it does"}],',
+    '  "issues": [{"title": "issue title", "cwe": "CWE-89 (leave empty if none fits)", "severity": "high|medium|low",',
     '              "confidence": "high|medium|low", "startLine": 1, "endLine": 3,',
-    '              "reason": "判断依据（引用代码事实）", "advice": "修复/复核建议"}],',
-    '  "attention": [{"startLine": 1, "endLine": 5, "note": "人工审计时需要注意的原因"}]',
+    '              "reason": "the basis (cite code facts)", "advice": "fix/review advice"}],',
+    '  "attention": [{"startLine": 1, "endLine": 5, "note": "why an auditor should pay attention here"}]',
     '}',
-    '要求：',
-    '- 行号使用代码里标注的行号，必须准确。',
-    '- functions 覆盖代码中出现的每个函数/方法，description 说明它实际做什么（读代码得出，不要猜测命名含义）。',
-    '- issues 只报告有代码依据的常见漏洞：注入（SQL/命令/模板）、路径穿越、SSRF、不安全反序列化、XXE、XSS、',
-    '  不安全的加密/随机数、硬编码凭据、越权/缺失鉴权、危险函数（eval 等）。不确定就用低 confidence，不要编造。',
-    '- attention 列出处理外部输入、认证鉴权、文件/网络/进程操作、敏感数据的代码段（即使没有明确漏洞）。',
-    `- 所有说明文字使用${lang}。`,
+    'Requirements:',
+    '- Use the line numbers annotated in the code; they must be accurate.',
+    '- functions must cover every function/method in the code; description states what it actually does (derived from reading the code, do not guess from the name).',
+    '- issues should only report common vulnerabilities with a code basis: injection (SQL/command/template), path traversal, SSRF, unsafe deserialization, XXE, XSS,',
+    '  insecure crypto/randomness, hardcoded credentials, broken/missing authorization, dangerous functions (eval, etc.). Use low confidence when unsure; do not fabricate.',
+    '- attention should list code handling external input, authentication/authorization, file/network/process operations, or sensitive data (even without a clear vulnerability).',
+    `- Write all prose in ${lang}.`,
   ].join('\n');
 }
 
 function numberLines(lines: string[], startLine: number): string {
-  // startLine 为 1-based 的首行行号；始终展示绝对行号，让 LLM 直接引用
+  // startLine is the 1-based line number of the first line; always show absolute line numbers so the LLM can cite them directly
   return lines.map((l, i) => `${String(startLine + i).padStart(5)}| ${l}`).join('\n');
 }
 
 function symbolListText(symbols: SymbolInfo[]): string {
   if (!symbols.length) {
-    return '（无静态符号信息）';
+    return '(no static symbol information)';
   }
   return symbols
-    .map((s) => `- ${s.kind} ${s.container ? s.container + '.' : ''}${s.name}${s.signature ?? ''}  第${s.startLine + 1}~${s.endLine + 1}行`)
+    .map((s) => `- ${s.kind} ${s.container ? s.container + '.' : ''}${s.name}${s.signature ?? ''}  lines ${s.startLine + 1}-${s.endLine + 1}`)
     .join('\n');
 }
 
-/** 按符号边界把文件切成若干行区间（1-based 闭区间） */
+/** Split a file into line ranges at symbol boundaries (1-based, inclusive) */
 export function splitChunks(lines: string[], symbols: SymbolInfo[], chunkChars = CHUNK_CHARS): Array<{ start: number; end: number }> {
   const total = lines.reduce((n, l) => n + l.length + 1, 0);
   if (total <= chunkChars) {
     return [{ start: 1, end: lines.length }];
   }
-  // 符号起始行是优先断点
+  // Symbol start lines are preferred break points
   const breakpoints = new Set(symbols.map((s) => s.startLine)); // 0-based
   const chunks: Array<{ start: number; end: number }> = [];
   let start = 0;
@@ -94,7 +94,7 @@ export function splitChunks(lines: string[], symbols: SymbolInfo[], chunkChars =
     }
     size += lines[i].length + 1;
     if (size > chunkChars && i > start) {
-      // 尽量在最近的符号边界断开
+      // Break at the nearest symbol boundary when possible
       const cut = lastBreak > start ? lastBreak : i;
       chunks.push({ start: start + 1, end: cut });
       start = cut;
@@ -117,7 +117,7 @@ function pickEnum<T extends string>(v: unknown, allowed: T[], fallback: T): T {
   return typeof v === 'string' && (allowed as string[]).includes(v) ? (v as T) : fallback;
 }
 
-/** 把 LLM 输出规范化 + 行号锚定到符号表 */
+/** Normalize LLM output + anchor line numbers to the symbol table */
 function normalize(raw: RawAnalysis, lineCount: number, symbols: SymbolInfo[]): Pick<FileAnalysis, 'functions' | 'issues' | 'attention'> {
   const symbolByName = new Map<string, SymbolInfo>();
   for (const s of symbols) {
@@ -133,7 +133,7 @@ function normalize(raw: RawAnalysis, lineCount: number, symbols: SymbolInfo[]): 
     const sym = symbolByName.get(f.name);
     functions.push({
       name: f.name,
-      // 有符号表时以静态解析的行号为准，消除 LLM 幻觉行号
+      // When a symbol table exists, trust the statically parsed line number to eliminate LLM line hallucinations
       line: sym ? sym.startLine + 1 : clampLine(f.line, lineCount),
       description: f.description,
     });
@@ -184,18 +184,18 @@ export async function analyzeFileContent(
   for (let c = 0; c < chunks.length; c++) {
     const { start, end } = chunks[c];
     if (chunks.length > 1) {
-      opts.onProgress?.(`分析第 ${c + 1}/${chunks.length} 段（第 ${start}~${end} 行）…`);
+      opts.onProgress?.(`Analyzing chunk ${c + 1}/${chunks.length} (lines ${start}-${end})…`);
     }
     const chunkSymbols = symbols.filter((s) => s.startLine + 1 >= start && s.startLine + 1 <= end);
     const user = [
-      `文件：${relPath}`,
-      `语言：${fileIndex?.languageId ?? '（未识别，按内容判断）'}`,
-      chunks.length > 1 ? `注意：这是文件的第 ${c + 1}/${chunks.length} 段（第 ${start}~${end} 行），行号为全文件绝对行号。` : '',
+      `File: ${relPath}`,
+      `Language: ${fileIndex?.languageId ?? '(not detected, infer from content)'}`,
+      chunks.length > 1 ? `Note: this is chunk ${c + 1}/${chunks.length} of the file (lines ${start}-${end}); line numbers are absolute within the whole file.` : '',
       '',
-      '静态解析出的符号（行号可信）：',
+      'Statically parsed symbols (line numbers are reliable):',
       symbolListText(chunkSymbols),
       '',
-      '代码：',
+      'Code:',
       numberLines(lines.slice(start - 1, end), start),
     ]
       .filter(Boolean)
@@ -203,7 +203,7 @@ export async function analyzeFileContent(
     partials.push(await client.completeJson<RawAnalysis>(system, user));
   }
 
-  // 合并分块结果
+  // Merge chunk results
   const merged: RawAnalysis = {
     functions: partials.flatMap((p) => p.functions ?? []),
     issues: partials.flatMap((p) => p.issues ?? []),
@@ -213,11 +213,11 @@ export async function analyzeFileContent(
 
   let summary = merged.summary ?? '';
   if (!summary) {
-    opts.onProgress?.('汇总文件总结…');
-    const sectionSummaries = partials.map((p, i) => `第${i + 1}段：${p.summary ?? '（无）'}`).join('\n');
+    opts.onProgress?.('Summarizing the file…');
+    const sectionSummaries = partials.map((p, i) => `Chunk ${i + 1}: ${p.summary ?? '(none)'}`).join('\n');
     const res = await client.completeJson<{ summary?: string }>(
       systemPrompt(opts.outputLanguage),
-      `以下是文件 ${relPath} 各段代码的功能概述，请综合成 2~4 句的整体功能说明，输出 JSON：{"summary": "..."}\n\n${sectionSummaries}`,
+      `Below are the functional summaries of each code chunk of file ${relPath}. Combine them into a 2-4 sentence overall description and output JSON: {"summary": "..."}\n\n${sectionSummaries}`,
     );
     summary = res.summary ?? sectionSummaries;
   }

@@ -1,7 +1,7 @@
 import { Node } from 'web-tree-sitter';
 import { LanguageSpec } from './languages';
 
-/** 各语言 import/include/using 声明的节点类型 */
+/** Node types for import/include/using declarations across languages */
 const IMPORT_NODE_TYPES = [
   'import_statement', // js/ts/python
   'import_from_statement', // python
@@ -13,14 +13,14 @@ const IMPORT_NODE_TYPES = [
   'export_statement', // js/ts re-export
 ];
 
-/** import 目标里可作为模块名的子节点类型 */
+/** Child node types within an import target that can serve as the module name */
 const TARGET_TYPES = ['dotted_name', 'relative_import', 'scoped_identifier', 'qualified_name', 'identifier', 'asterisk'];
 
 function stripQuotes(s: string): string {
   return s.replace(/^["'<]+|[">']+$/g, '');
 }
 
-/** 提取文件的原始 import 目标（不解析成路径，解析在 architecture 里做） */
+/** Extract a file's raw import targets (unresolved; path resolution happens in architecture). */
 export function extractImports(root: Node, spec: LanguageSpec): string[] {
   const imports = new Set<string>();
 
@@ -39,7 +39,7 @@ export function extractImports(root: Node, spec: LanguageSpec): string[] {
       }
       continue;
     }
-    // java import a.b.C; / python import a.b / c# using A.B; / php use A\B;
+    // java import a.b.C; / python import a.b / c# using A.B; / php use A\\B;
     for (const child of node.namedChildren) {
       if (child && TARGET_TYPES.includes(child.type)) {
         imports.add(child.text);
@@ -52,7 +52,7 @@ export function extractImports(root: Node, spec: LanguageSpec): string[] {
     }
   }
 
-  // JS 系的 require('x') / 动态 import('x')；PHP 的 include/require 'x'
+  // JS-family require('x') / dynamic import('x'); PHP include/require 'x'
   if (spec.arrowAssignments || spec.id === 'php') {
     const extra = root.descendantsOfType(['call_expression', 'include_expression', 'require_expression', 'include_once_expression', 'require_once_expression']);
     for (const node of extra) {
@@ -94,8 +94,9 @@ function normalize(p: string): string {
 }
 
 /**
- * 把原始 import 目标解析成工作区内的文件（尽力而为，解析不了视为外部依赖返回 undefined）。
- * allFiles 为工作区内全部已索引文件的相对路径（/ 分隔）。
+ * Resolve a raw import target to a file within the workspace (best-effort; returns undefined
+ * for unresolvable targets, treated as external dependencies).
+ * allFiles is the set of all indexed files' relative paths (/ separated).
  */
 export function resolveImport(fromFile: string, imp: string, allFiles: Set<string>): string | undefined {
   const dir = fromFile.includes('/') ? fromFile.replace(/\/[^/]*$/, '') : '';
@@ -113,11 +114,11 @@ export function resolveImport(fromFile: string, imp: string, allFiles: Set<strin
     return undefined;
   };
 
-  // 相对路径（js/ts/php/c include）
+  // Relative path (js/ts/php/c include)
   if (imp.startsWith('.')) {
     return tryCandidates(normalize(`${dir}/${imp}`));
   }
-  // c include "a/b.h"：先相对当前目录，再全局 basename 匹配
+  // c include "a/b.h": try relative to the current dir first, then match by basename globally
   if (/\.(h|hpp|hh|c|cpp|php)$/.test(imp)) {
     const rel = tryCandidates(normalize(`${dir}/${imp}`));
     if (rel) {
@@ -131,18 +132,18 @@ export function resolveImport(fromFile: string, imp: string, allFiles: Set<strin
     }
     return undefined;
   }
-  // 点/反斜杠分隔（java、python、c#、php namespace）→ 转路径后按后缀匹配
+  // Dot/backslash separated (java, python, c#, php namespace) -> convert to a path and match by suffix
   const asPath = imp.replace(/\./g, '/').replace(/\\/g, '/').replace(/\/\*$/, '');
   for (const f of allFiles) {
     const noExt = f.replace(/\.[^./]+$/, '');
     if (noExt === asPath || noExt.endsWith(`/${asPath}`)) {
       return f;
     }
-    // python: 包目录 __init__.py
+    // python: package directory __init__.py
     if (f === `${asPath}/__init__.py` || f.endsWith(`/${asPath}/__init__.py`)) {
       return f;
     }
   }
-  // go：import 路径后缀是目录 → 记到该目录下任意文件？留给目录级聚合，返回 undefined
+  // go: an import path suffix is a directory -> left to directory-level aggregation; return undefined
   return undefined;
 }

@@ -27,7 +27,7 @@ export function compileRules(rules: TaintRule[]): CompiledRules {
       try {
         textRules.push({ rule, re: new RegExp(pattern) });
       } catch {
-        // 跳过非法正则，不影响其余规则
+        // Skip invalid regex without affecting other rules
       }
     }
   }
@@ -37,8 +37,8 @@ export function compileRules(rules: TaintRule[]): CompiledRules {
 const langAllowed = (rule: TaintRule, lang: string) => !rule.languages || rule.languages.includes(lang);
 
 /**
- * 扫描单个文件，产出候选标记（status=candidate, origin=scan）。
- * 每个 (kind, line) 只保留一个候选：调用点匹配优先于文本匹配。
+ * Scan a single file and produce candidate marks (status=candidate, origin=scan).
+ * At most one candidate per (kind, line): call-site matches take priority over text matches.
  */
 export function scanFile(input: ScanFileInput, compiled: CompiledRules, now: string): Mark[] {
   const byKey = new Map<string, Mark>();
@@ -66,7 +66,7 @@ export function scanFile(input: ScanFileInput, compiled: CompiledRules, now: str
     });
   };
 
-  // 调用点匹配（更精确，先处理）
+  // Call-site matches (more precise, processed first)
   for (const call of input.calls) {
     const rules = compiled.byCallName.get(call.callee);
     if (!rules) {
@@ -80,7 +80,7 @@ export function scanFile(input: ScanFileInput, compiled: CompiledRules, now: str
     }
   }
 
-  // 文本匹配（补充非调用形式的 source/sink）
+  // Text matches (cover non-call forms of source/sink)
   for (let i = 0; i < input.lines.length; i++) {
     const text = input.lines[i];
     for (const { rule, re } of compiled.textRules) {
@@ -95,10 +95,10 @@ export function scanFile(input: ScanFileInput, compiled: CompiledRules, now: str
 }
 
 /**
- * 把新扫描的候选并入已有标记：
- *   - 已有同 id 标记（人工确认/排除/备注）保留，不被候选覆盖；
- *   - 上次扫描遗留、这次未再命中的候选（origin=scan 且 status=candidate）视为过期删除；
- *   - 人工标记（origin=manual）与已确认/排除的标记一律保留。
+ * Merge newly scanned candidates into existing marks:
+ *   - existing marks with the same id (user confirmed/excluded/noted) are kept, not overwritten by candidates;
+ *   - candidates left from a previous scan that are no longer matched (origin=scan and status=candidate) are dropped as stale;
+ *   - manual marks (origin=manual) and any confirmed/excluded marks are always kept.
  */
 export function mergeCandidates(existing: Mark[], candidates: Mark[]): Mark[] {
   const candidateIds = new Set(candidates.map((c) => c.id));
@@ -106,7 +106,7 @@ export function mergeCandidates(existing: Mark[], candidates: Mark[]): Mark[] {
     if (m.origin === 'manual' || m.status !== 'candidate') {
       return true;
     }
-    return candidateIds.has(m.id); // 仍被命中的旧候选保留（下面按 id 去重）
+    return candidateIds.has(m.id); // keep still-matched old candidates (deduped by id below)
   });
   const keptIds = new Set(kept.map((m) => m.id));
   const added = candidates.filter((c) => !keptIds.has(c.id));

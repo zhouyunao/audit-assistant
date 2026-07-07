@@ -2,7 +2,7 @@ import { LlmClient, LlmProvider } from './client';
 import { OpencodeClient } from './opencodeClient';
 import { LlmConfig } from '../config';
 
-/** 按配置的 provider 选择后端：OpenAI 兼容端点或 opencode serve。 */
+/** Choose the backend based on the configured provider: OpenAI-compatible endpoint or opencode serve. */
 export function createLlmProvider(cfg: LlmConfig): LlmProvider {
   if (cfg.provider === 'opencode') {
     return new OpencodeClient({

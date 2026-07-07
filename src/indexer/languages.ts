@@ -1,16 +1,16 @@
-// 各语言的 tree-sitter 节点类型表。加新语言 = 加一条 spec + copy-wasm.js 里加对应 grammar。
+// Per-language tree-sitter node-type table. Adding a language = add one spec + the matching grammar in copy-wasm.js.
 
 export interface LanguageSpec {
   id: string;
   wasm: string;
   extensions: string[];
-  /** 定义函数/方法的节点类型 */
+  /** Node types that define functions/methods */
   functionNodes: string[];
-  /** 定义类/接口等容器的节点类型 */
+  /** Node types that define containers such as classes/interfaces */
   classNodes: string[];
-  /** 调用点节点类型 */
+  /** Call-site node types */
   callNodes: string[];
-  /** 是否识别 `const f = () => {}` 式的函数赋值（JS/TS 系） */
+  /** Whether to recognize `const f = () => {}` style function assignments (JS/TS family) */
   arrowAssignments?: boolean;
 }
 

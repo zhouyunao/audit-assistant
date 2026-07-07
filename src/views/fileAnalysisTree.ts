@@ -13,7 +13,7 @@ const SEVERITY_ICON: Record<string, vscode.ThemeIcon> = {
   low: new vscode.ThemeIcon('info'),
 };
 
-/** 「文件分析」侧边栏：总结 / 函数清单 / 疑似漏洞 / 注意点，点击跳转对应行 */
+/** "File Analysis" sidebar: summary / function list / suspected issues / attention points; click to jump to the line */
 export class FileAnalysisTreeProvider implements vscode.TreeDataProvider<Item> {
   private readonly emitter = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.emitter.event;
@@ -39,11 +39,11 @@ export class FileAnalysisTreeProvider implements vscode.TreeDataProvider<Item> {
     }
     if (this.status === 'none' || !this.analysis) {
       if (this.status === 'analyzing') {
-        const item = new Item('正在分析…');
+        const item = new Item('Analyzing…');
         item.iconPath = new vscode.ThemeIcon('loading~spin');
         return [item];
       }
-      return []; // 显示 viewsWelcome
+      return []; // show viewsWelcome
     }
 
     const a = this.analysis;
@@ -51,28 +51,28 @@ export class FileAnalysisTreeProvider implements vscode.TreeDataProvider<Item> {
 
     const statusItem = new Item(
       this.status === 'stale'
-        ? '⚠ 代码已改动，分析结果可能过期'
-        : `分析于 ${new Date(a.analyzedAt).toLocaleString()} · ${a.author}`,
+        ? '⚠ Code changed; analysis may be stale'
+        : `Analyzed ${new Date(a.analyzedAt).toLocaleString()} · ${a.author}`,
     );
     statusItem.description = a.model;
     statusItem.iconPath = new vscode.ThemeIcon(this.status === 'stale' ? 'history' : 'check');
     statusItem.tooltip = a.path;
     items.push(statusItem);
 
-    const summaryItem = new Item('文件功能', vscode.TreeItemCollapsibleState.Expanded);
+    const summaryItem = new Item('Summary', vscode.TreeItemCollapsibleState.Expanded);
     summaryItem.iconPath = new vscode.ThemeIcon('book');
     summaryItem.children = [this.textItem(a.summary)];
     items.push(summaryItem);
 
     if (a.issues.length) {
-      const g = new Item(`疑似漏洞 (${a.issues.length})`, vscode.TreeItemCollapsibleState.Expanded);
+      const g = new Item(`Suspected Issues (${a.issues.length})`, vscode.TreeItemCollapsibleState.Expanded);
       g.iconPath = new vscode.ThemeIcon('shield');
       g.children = a.issues.map((i) => {
         const item = new Item(`${i.title}${i.cwe ? ` [${i.cwe}]` : ''}`);
         item.description = `L${i.startLine} · ${i.severity}/${i.confidence}`;
         item.iconPath = SEVERITY_ICON[i.severity] ?? SEVERITY_ICON.medium;
         item.tooltip = new vscode.MarkdownString(
-          `**${i.title}**\n\n${i.reason}${i.advice ? `\n\n**建议**：${i.advice}` : ''}`,
+          `**${i.title}**\n\n${i.reason}${i.advice ? `\n\n**Advice**: ${i.advice}` : ''}`,
         );
         item.command = this.jumpCommand(i.startLine);
         return item;
@@ -81,7 +81,7 @@ export class FileAnalysisTreeProvider implements vscode.TreeDataProvider<Item> {
     }
 
     if (a.functions.length) {
-      const g = new Item(`函数清单 (${a.functions.length})`, vscode.TreeItemCollapsibleState.Expanded);
+      const g = new Item(`Functions (${a.functions.length})`, vscode.TreeItemCollapsibleState.Expanded);
       g.iconPath = new vscode.ThemeIcon('symbol-function');
       g.children = a.functions.map((f) => {
         const item = new Item(f.name);
@@ -95,7 +95,7 @@ export class FileAnalysisTreeProvider implements vscode.TreeDataProvider<Item> {
     }
 
     if (a.attention.length) {
-      const g = new Item(`需要注意 (${a.attention.length})`, vscode.TreeItemCollapsibleState.Collapsed);
+      const g = new Item(`Attention (${a.attention.length})`, vscode.TreeItemCollapsibleState.Collapsed);
       g.iconPath = new vscode.ThemeIcon('eye');
       g.children = a.attention.map((s) => {
         const item = new Item(`L${s.startLine}~${s.endLine}`);
@@ -123,7 +123,7 @@ export class FileAnalysisTreeProvider implements vscode.TreeDataProvider<Item> {
     }
     return {
       command: 'auditAssistant.revealLine',
-      title: '跳转',
+      title: 'Go to',
       arguments: [this.fileUri, line],
     };
   }

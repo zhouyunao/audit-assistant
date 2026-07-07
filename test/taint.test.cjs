@@ -36,9 +36,9 @@ test('java: sink executeQuery + source getParameter', async () => {
       '}',
     ].join('\n'),
   );
-  assert.ok(has(marks, 'sink', (m) => m.category === 'SQL 执行' && m.line === 4), 'executeQuery sink');
-  assert.ok(has(marks, 'source', (m) => m.category === 'HTTP 入参' && m.line === 3), 'getParameter source');
-  // 汇入函数应锚定到 find
+  assert.ok(has(marks, 'sink', (m) => m.category === 'SQL Execution' && m.line === 4), 'executeQuery sink');
+  assert.ok(has(marks, 'source', (m) => m.category === 'HTTP Input' && m.line === 3), 'getParameter source');
+  // the enclosing function should be anchored to find
   assert.equal(marks.find((m) => m.kind === 'sink').symbol, 'find');
 });
 
@@ -47,8 +47,8 @@ test('python: subprocess sink + request source + os.environ', async () => {
     'app/views.py',
     ['import subprocess', 'def run(request):', '    cmd = request.args.get("c")', '    subprocess.run(cmd, shell=True)', '    token = os.environ["T"]'].join('\n'),
   );
-  assert.ok(has(marks, 'sink', (m) => m.category === '命令执行'), 'subprocess.run sink');
-  assert.ok(has(marks, 'source', (m) => m.category === 'HTTP 入参'), 'request.args source');
+  assert.ok(has(marks, 'sink', (m) => m.category === 'Command Execution'), 'subprocess.run sink');
+  assert.ok(has(marks, 'source', (m) => m.category === 'HTTP Input'), 'request.args source');
   assert.ok(has(marks, 'source', (m) => m.line === 5), 'os.environ source');
 });
 
@@ -58,8 +58,8 @@ test('php: superglobal source + system sink + unserialize', async () => {
     ['<?php', '$cmd = $_GET["c"];', 'system($cmd);', '$obj = unserialize($_POST["data"]);'].join('\n'),
   );
   assert.ok(has(marks, 'source', (m) => m.line === 2), '$_GET source');
-  assert.ok(has(marks, 'sink', (m) => m.category === '命令执行' && m.line === 3), 'system sink');
-  assert.ok(has(marks, 'sink', (m) => m.category === '不安全反序列化' && m.line === 4), 'unserialize sink');
+  assert.ok(has(marks, 'sink', (m) => m.category === 'Command Execution' && m.line === 3), 'system sink');
+  assert.ok(has(marks, 'sink', (m) => m.category === 'Unsafe Deserialization' && m.line === 4), 'unserialize sink');
 });
 
 test('js: eval sink + req.query source + innerHTML text sink', async () => {
@@ -68,7 +68,7 @@ test('js: eval sink + req.query source + innerHTML text sink', async () => {
     ['const handler = (req, res) => {', '  const q = req.query.id;', '  eval(q);', '  el.innerHTML = q;', '};'].join('\n'),
   );
   assert.ok(has(marks, 'source', (m) => m.line === 2), 'req.query source');
-  assert.ok(has(marks, 'sink', (m) => m.category === '代码执行' && m.line === 3), 'eval sink');
+  assert.ok(has(marks, 'sink', (m) => m.category === 'Code Execution' && m.line === 3), 'eval sink');
   assert.ok(has(marks, 'sink', (m) => m.category === 'XSS' && m.line === 4), 'innerHTML sink');
 });
 
@@ -77,8 +77,8 @@ test('go: exec.Command sink + FormValue source', async () => {
     'main.go',
     ['package main', 'import "os/exec"', 'func h(r *http.Request) {', '  c := r.FormValue("c")', '  exec.Command("sh", "-c", c).Run()', '}'].join('\n'),
   );
-  assert.ok(has(marks, 'sink', (m) => m.category === '命令执行'), 'exec.Command sink');
-  assert.ok(has(marks, 'source', (m) => m.category === 'HTTP 入参'), 'FormValue source');
+  assert.ok(has(marks, 'sink', (m) => m.category === 'Command Execution'), 'exec.Command sink');
+  assert.ok(has(marks, 'source', (m) => m.category === 'HTTP Input'), 'FormValue source');
 });
 
 test('language filtering: php superglobal pattern does not fire in python', async () => {
@@ -112,10 +112,10 @@ test('mergeCandidates: preserves user decisions, drops stale candidates', () => 
 });
 
 test('applyManualMark: upgrades scan candidate to confirmed, keeps category', () => {
-  const candidate = { id: markId('sink', 'a.js', 3), kind: 'sink', status: 'candidate', origin: 'scan', file: 'a.js', line: 3, category: 'SQL 执行', cwe: 'CWE-89', author: '', time: NOW };
+  const candidate = { id: markId('sink', 'a.js', 3), kind: 'sink', status: 'candidate', origin: 'scan', file: 'a.js', line: 3, category: 'SQL Execution', cwe: 'CWE-89', author: '', time: NOW };
   const mark = applyManualMark([candidate], { kind: 'sink', file: 'a.js', line: 3, symbol: 'find', author: 'alice' }, NOW);
   assert.equal(mark.status, 'confirmed');
   assert.equal(mark.origin, 'manual');
-  assert.equal(mark.category, 'SQL 执行', 'inherits category from prior candidate');
+  assert.equal(mark.category, 'SQL Execution', 'inherits category from prior candidate');
   assert.equal(mark.author, 'alice');
 });

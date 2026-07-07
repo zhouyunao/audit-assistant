@@ -12,7 +12,7 @@ const IDENTIFIER_TYPES = new Set([
   'name',
 ]);
 
-/** 函数/类定义节点的名字：优先 name 字段，其次沿 declarator 链下潜（C/C++）。 */
+/** Name of a function/class definition node: prefer the `name` field, else descend the declarator chain (C/C++). */
 function definitionName(node: Node): string | undefined {
   const nameNode = node.childForFieldName('name');
   if (nameNode) {
@@ -32,7 +32,7 @@ function definitionName(node: Node): string | undefined {
   return undefined;
 }
 
-/** 向上找最近的 class 容器名 */
+/** Walk up to find the nearest enclosing class container name. */
 function containerName(node: Node, spec: LanguageSpec): string | undefined {
   let cur = node.parent;
   while (cur) {
@@ -69,7 +69,7 @@ function makeSymbol(
   };
 }
 
-/** 是否为函数值（JS/TS 的箭头函数、函数表达式） */
+/** Whether the node is a function value (JS/TS arrow function or function expression). */
 function isFunctionValue(node: Node | null): boolean {
   return !!node && ['arrow_function', 'function_expression', 'function', 'generator_function'].includes(node.type);
 }

@@ -15,9 +15,9 @@ const STATUS_ICON: Record<Mark['status'], vscode.ThemeIcon> = {
   excluded: new vscode.ThemeIcon('circle-slash', new vscode.ThemeColor('disabledForeground')),
 };
 
-const STATUS_LABEL: Record<Mark['status'], string> = { confirmed: '已确认', candidate: '候选', excluded: '已排除' };
+const STATUS_LABEL: Record<Mark['status'], string> = { confirmed: 'Confirmed', candidate: 'Candidate', excluded: 'Excluded' };
 
-/** Source/Sink 视图：按 Sink / Source 两组，组内按 已确认→候选→已排除 排序 */
+/** Source/Sink view: two groups (Sink / Source), each sorted Confirmed -> Candidate -> Excluded */
 export class SourceSinkTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly emitter = new vscode.EventEmitter<Node | undefined>();
   readonly onDidChangeTreeData = this.emitter.event;
@@ -54,7 +54,7 @@ export class SourceSinkTreeProvider implements vscode.TreeDataProvider<Node> {
       kind === 'sink' ? 'Sink' : 'Source',
       vscode.TreeItemCollapsibleState.Expanded,
     );
-    group.description = `${marks.length} 个（已确认 ${confirmed}）`;
+    group.description = `${marks.length} (confirmed ${confirmed})`;
     group.iconPath = new vscode.ThemeIcon(kind === 'sink' ? 'flame' : 'sign-in');
     group.children = marks
       .slice()
@@ -69,10 +69,10 @@ export class SourceSinkTreeProvider implements vscode.TreeDataProvider<Node> {
     node.tooltip = new vscode.MarkdownString(
       [
         `**${m.kind === 'sink' ? 'Sink' : 'Source'}** · ${STATUS_LABEL[m.status]}`,
-        m.category ? `分类：${m.category}${m.cwe ? ` (${m.cwe})` : ''}` : '',
-        `位置：${m.file}:${m.line}`,
-        m.author ? `标记人：${m.author}` : '',
-        m.note ? `备注：${m.note}` : '',
+        m.category ? `Category: ${m.category}${m.cwe ? ` (${m.cwe})` : ''}` : '',
+        `Location: ${m.file}:${m.line}`,
+        m.author ? `Marked by: ${m.author}` : '',
+        m.note ? `Note: ${m.note}` : '',
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -80,7 +80,7 @@ export class SourceSinkTreeProvider implements vscode.TreeDataProvider<Node> {
     node.iconPath = STATUS_ICON[m.status];
     node.markId = m.id;
     node.contextValue = `auditMark.${m.kind}.${m.status}`;
-    node.command = { command: 'auditAssistant.revealLocation', title: '跳转', arguments: [m.file, m.line] };
+    node.command = { command: 'auditAssistant.revealLocation', title: 'Go to', arguments: [m.file, m.line] };
     return node;
   }
 }
