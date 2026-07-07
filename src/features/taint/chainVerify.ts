@@ -1,4 +1,4 @@
-import { LlmClient, ToolDef, tryParseJson } from '../../llm/client';
+import { LlmProvider, ToolDef, tryParseJson } from '../../llm/client';
 import { runAgent, AgentTool } from '../../llm/agentLoop';
 import { ProjectIndex } from '../../indexer/indexer';
 import { ChainCandidate, ChainNode } from './pathSearch';
@@ -139,7 +139,7 @@ function normalizeVerdict(v: string | undefined): Finding['verdict'] {
  */
 export async function verifyChain(
   index: ProjectIndex,
-  client: LlmClient,
+  client: LlmProvider,
   readFile: FileReader,
   candidate: ChainCandidate,
   sink: Mark,

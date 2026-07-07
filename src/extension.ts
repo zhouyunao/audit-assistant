@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { getLlmConfig, getSettings, setApiKeyCommand } from './config';
-import { LlmClient } from './llm/client';
+import { createLlmProvider } from './llm/provider';
 import { ParserPool } from './indexer/parser';
 import { ProjectIndex, contentHash, isSupportedFile } from './indexer/indexer';
 import { IndexCache } from './indexer/cache';
@@ -205,7 +205,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
       const settings = getSettings();
-      const client = new LlmClient(llmCfg);
+      const client = createLlmProvider(llmCfg);
       const relPath = relPathOf(editor.document.uri);
       const content = editor.document.getText();
 
@@ -262,7 +262,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       // LLM 未配置时照常出图，只是没有模块职责标注
       const llmCfg = await getLlmConfig(context);
-      const client = llmCfg.model ? new LlmClient(llmCfg) : undefined;
+      const client = llmCfg.model ? createLlmProvider(llmCfg) : undefined;
       const settings = getSettings();
       const { architecture, llmError } = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Audit: 生成项目结构图', cancellable: false },
@@ -396,7 +396,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const source = chosen.reachedSourceMarkId ? sourceMarks.find((m) => m.id === chosen.reachedSourceMarkId) : undefined;
       const settings = getSettings();
-      const client = new LlmClient(llmCfg);
+      const client = createLlmProvider(llmCfg);
       try {
         const finding = await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: 'Audit: LLM 验证调用链', cancellable: false },

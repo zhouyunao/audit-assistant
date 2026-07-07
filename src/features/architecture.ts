@@ -1,6 +1,6 @@
 import { ProjectIndex } from '../indexer/indexer';
 import { resolveImport } from '../indexer/imports';
-import { LlmClient } from '../llm/client';
+import { LlmProvider } from '../llm/client';
 import { AuditStore } from '../store/auditStore';
 import { Architecture, ArchEdge, ArchModule, FileIndex } from '../types';
 
@@ -254,7 +254,7 @@ async function annotate(
   graph: ModuleGraph,
   files: FileIndex[],
   store: AuditStore,
-  client: LlmClient,
+  client: LlmProvider,
   outputLanguage: string,
 ): Promise<{ overview?: string; byModule: Map<string, string> }> {
   const lang = outputLanguage === 'en' ? 'English' : '简体中文';
@@ -305,7 +305,7 @@ export interface GenerateOptions {
 export async function generateArchitecture(
   index: ProjectIndex,
   store: AuditStore,
-  client: LlmClient | undefined,
+  client: LlmProvider | undefined,
   opts: GenerateOptions,
 ): Promise<{ architecture: Architecture; llmError?: string }> {
   const files = index.allFiles();

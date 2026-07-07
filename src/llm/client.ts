@@ -28,6 +28,21 @@ export interface ChatResult {
   toolCalls?: ToolCall[];
 }
 
+export interface ChatExtra {
+  tools?: ToolDef[];
+  jsonMode?: boolean;
+}
+
+/**
+ * LLM 后端统一接口。OpenAI 兼容端点（LlmClient）与 opencode serve（OpencodeClient）
+ * 都实现它，特性层只依赖该接口，不关心具体后端。
+ */
+export interface LlmProvider {
+  readonly model: string;
+  chat(messages: ChatMessage[], extra?: ChatExtra): Promise<ChatResult>;
+  completeJson<T>(system: string, user: string): Promise<T>;
+}
+
 export interface LlmClientOptions {
   baseUrl: string;
   model: string;
@@ -39,14 +54,14 @@ export interface LlmClientOptions {
 
 export class LlmError extends Error {}
 
-export class LlmClient {
+export class LlmClient implements LlmProvider {
   constructor(private readonly opts: LlmClientOptions) {}
 
   get model(): string {
     return this.opts.model;
   }
 
-  async chat(messages: ChatMessage[], extra?: { tools?: ToolDef[]; jsonMode?: boolean }): Promise<ChatResult> {
+  async chat(messages: ChatMessage[], extra?: ChatExtra): Promise<ChatResult> {
     if (!this.opts.model) {
       throw new LlmError('未配置模型名，请在设置中填写 auditAssistant.llm.model');
     }
@@ -109,37 +124,41 @@ export class LlmClient {
     };
   }
 
-  /**
-   * 要求 LLM 输出符合给定结构的 JSON，自动剥离 markdown 代码块围栏；
-   * 解析失败时带着错误信息重试一次。
-   */
-  async completeJson<T>(system: string, user: string): Promise<T> {
-    const messages: ChatMessage[] = [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ];
-    const first = await this.chat(messages, { jsonMode: true });
-    const parsed = tryParseJson<T>(first.content);
-    if (parsed !== undefined) {
-      return parsed;
-    }
-    const retry = await this.chat(
-      [
-        ...messages,
-        { role: 'assistant', content: first.content },
-        {
-          role: 'user',
-          content: '上面的回复无法解析为 JSON。请只输出一个合法的 JSON 对象，不要包含任何其他文字或 markdown 围栏。',
-        },
-      ],
-      { jsonMode: true },
-    );
-    const parsed2 = tryParseJson<T>(retry.content);
-    if (parsed2 === undefined) {
-      throw new LlmError(`LLM 两次都未能输出合法 JSON。最后回复：${retry.content.slice(0, 300)}`);
-    }
-    return parsed2;
+  completeJson<T>(system: string, user: string): Promise<T> {
+    return completeJson<T>(this, system, user);
   }
+}
+
+/**
+ * 要求 LLM 输出符合给定结构的 JSON，自动剥离 markdown 代码块围栏；
+ * 解析失败时带着错误信息重试一次。对任意 LlmProvider 通用。
+ */
+export async function completeJson<T>(provider: LlmProvider, system: string, user: string): Promise<T> {
+  const messages: ChatMessage[] = [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ];
+  const first = await provider.chat(messages, { jsonMode: true });
+  const parsed = tryParseJson<T>(first.content);
+  if (parsed !== undefined) {
+    return parsed;
+  }
+  const retry = await provider.chat(
+    [
+      ...messages,
+      { role: 'assistant', content: first.content },
+      {
+        role: 'user',
+        content: '上面的回复无法解析为 JSON。请只输出一个合法的 JSON 对象，不要包含任何其他文字或 markdown 围栏。',
+      },
+    ],
+    { jsonMode: true },
+  );
+  const parsed2 = tryParseJson<T>(retry.content);
+  if (parsed2 === undefined) {
+    throw new LlmError(`LLM 两次都未能输出合法 JSON。最后回复：${retry.content.slice(0, 300)}`);
+  }
+  return parsed2;
 }
 
 export function tryParseJson<T>(raw: string): T | undefined {

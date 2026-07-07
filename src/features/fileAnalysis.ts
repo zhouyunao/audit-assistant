@@ -1,4 +1,4 @@
-import { LlmClient } from '../llm/client';
+import { LlmProvider } from '../llm/client';
 import { ProjectIndex, contentHash } from '../indexer/indexer';
 import { AuditStore } from '../store/auditStore';
 import { AttentionSpan, FileAnalysis, FunctionSummary, IssueFinding, SymbolInfo } from '../types';
@@ -169,7 +169,7 @@ function normalize(raw: RawAnalysis, lineCount: number, symbols: SymbolInfo[]): 
 export async function analyzeFileContent(
   relPath: string,
   content: string,
-  client: LlmClient,
+  client: LlmProvider,
   index: ProjectIndex,
   store: AuditStore,
   opts: AnalyzeOptions,

@@ -242,15 +242,33 @@
     "configuration": {
       "title": "Audit Assistant",
       "properties": {
+        "auditAssistant.llm.provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "opencode"
+          ],
+          "enumDescriptions": [
+            "OpenAI 兼容端点（vLLM / Ollama / OneAPI / 各云厂商）",
+            "opencode serve 会话式 API（需先运行 opencode serve）"
+          ],
+          "default": "openai",
+          "description": "LLM 后端类型。openai=OpenAI 兼容 /chat/completions；opencode=opencode serve 的会话式 API。"
+        },
         "auditAssistant.llm.baseUrl": {
           "type": "string",
           "default": "http://localhost:11434/v1",
-          "description": "OpenAI 兼容端点的 Base URL（如 http://内网host:8000/v1）。API Key 通过命令「Audit: 设置 LLM API Key」保存在 VSCode SecretStorage，不会写入设置文件。"
+          "description": "端点 Base URL。openai 形如 http://内网host:8000/v1；opencode 形如 http://127.0.0.1:4096（opencode 时若保持默认值会自动切到该地址）。鉴权凭据通过命令「Audit: 设置 LLM API Key」保存在 VSCode SecretStorage，不会写入设置文件。"
         },
         "auditAssistant.llm.model": {
           "type": "string",
           "default": "",
-          "description": "模型名（传给 /chat/completions 的 model 字段）"
+          "description": "openai：模型名（传给 /chat/completions 的 model）。opencode：providerID/modelID，如 anthropic/claude-3-5-sonnet-20241022。"
+        },
+        "auditAssistant.llm.opencode.agent": {
+          "type": "string",
+          "default": "",
+          "description": "（仅 opencode）可选的 agent 名，留空用默认 agent。"
         },
         "auditAssistant.llm.temperature": {
           "type": "number",

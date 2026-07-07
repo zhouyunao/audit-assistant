@@ -1,4 +1,4 @@
-import { ChatMessage, LlmClient, ToolDef } from './client';
+import { ChatMessage, LlmProvider, ToolDef } from './client';
 
 /** 一个可被 LLM 调用的工具：定义 + 本地执行 */
 export interface AgentTool {
@@ -18,7 +18,7 @@ export interface AgentResult {
  * 「已把上下文喂进 prompt、工具只是可选补充」的用法能自然降级。
  */
 export async function runAgent(
-  client: LlmClient,
+  client: LlmProvider,
   seed: ChatMessage[],
   tools: AgentTool[],
   maxSteps = 12,

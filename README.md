@@ -29,10 +29,20 @@ npm run build      # 拷贝 wasm + 打包 dist/extension.js
 
 ### 配置 LLM
 
-任何 OpenAI 兼容端点均可（vLLM / Ollama / OneAPI / 各云厂商），代码只会发送到你配置的端点：
+通过 `auditAssistant.llm.provider` 选择后端，代码只会发送到你配置的端点。鉴权凭据统一用命令 **`Audit: 设置 LLM API Key`** 保存在 VSCode SecretStorage（不进设置文件、不进仓库）。
 
-1. 设置 `auditAssistant.llm.baseUrl`（如 `http://内网host:8000/v1`）和 `auditAssistant.llm.model`。
-2. 端点需要鉴权时，运行命令 **`Audit: 设置 LLM API Key`**（保存在 VSCode SecretStorage，不进设置文件、不进仓库）。
+**A) OpenAI 兼容端点（默认，`provider: openai`）**——vLLM / Ollama / OneAPI / 各云厂商：
+
+1. `auditAssistant.llm.baseUrl`（如 `http://内网host:8000/v1`）+ `auditAssistant.llm.model`（模型名）。
+2. 端点需要鉴权时用上面的命令填 API Key。
+
+**B) opencode serve（`provider: opencode`）**——复用本机 opencode 的模型配置：
+
+1. 先起服务：`opencode serve`（默认 `http://127.0.0.1:4096`；可加 `--port` / `--hostname`）。
+2. `auditAssistant.llm.provider` 设为 `opencode`；`auditAssistant.llm.model` 填 `providerID/modelID`（如 `anthropic/claude-3-5-sonnet-20241022`）；`baseUrl` 保持默认会自动指向 `http://127.0.0.1:4096`。
+3. 若服务端设了 `OPENCODE_SERVER_PASSWORD`，用上面的命令把密码填进去。
+
+> opencode 是会话式 API（非 OpenAI 兼容），扩展内部通过「建会话 → 发消息 → 取回复」对接。opencode 自带 agent/工具循环，因此调用链确认走「每跳源码预取进 prompt」的取证模式（不依赖 OpenAI tool-calling），其余功能一致。
 
 ### 使用
 
@@ -103,4 +113,4 @@ npx @vscode/vsce package    # 生成 audit-assistant-<version>.vsix
 
 ### 代码结构
 
-`src/` 下：`indexer/`（tree-sitter 多语言解析、符号表、近似调用图、缓存）、`llm/`（`client` OpenAI 兼容客户端、`agentLoop` 通用 tool-calling 循环）、`features/`（`fileAnalysis` 文件分析、`architecture` 结构树、`taint/` source/sink 规则与扫描、`taint/pathSearch` 调用链反向搜索、`taint/chainVerify` LLM 逐跳取证）、`store/`（`.audit/` 读写）、`views/`（侧边栏 TreeView、CodeLens、编辑器装饰）、`extension.ts`（激活入口，注册命令/视图/事件）。
+`src/` 下：`indexer/`（tree-sitter 多语言解析、符号表、近似调用图、缓存）、`llm/`（`client` OpenAI 兼容客户端 + `LlmProvider` 接口、`opencodeClient` opencode serve 会话式后端、`provider` 后端工厂、`agentLoop` 通用 tool-calling 循环）、`features/`（`fileAnalysis` 文件分析、`architecture` 结构树、`taint/` source/sink 规则与扫描、`taint/pathSearch` 调用链反向搜索、`taint/chainVerify` LLM 逐跳取证）、`store/`（`.audit/` 读写）、`views/`（侧边栏 TreeView、CodeLens、编辑器装饰）、`extension.ts`（激活入口，注册命令/视图/事件）。

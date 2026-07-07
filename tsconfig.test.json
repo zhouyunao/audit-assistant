@@ -10,6 +10,7 @@
     "src/types.ts",
     "src/llm/client.ts",
     "src/llm/agentLoop.ts",
+    "src/llm/opencodeClient.ts",
     "src/store/auditStore.ts",
     "src/features/fileAnalysis.ts",
     "src/features/architecture.ts",
