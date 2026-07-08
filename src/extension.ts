@@ -67,9 +67,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const decorations = new AnalysisDecorations();
   const markDecorations = new MarkDecorations();
   const markCodeLens = new MarkCodeLensProvider(store, relPathOf);
+  // TreeView (not just registerTreeDataProvider) so we can reveal()/sync selection with the editor
+  const sourceSinkView = vscode.window.createTreeView('auditSourceSink', { treeDataProvider: sourceSinkTree });
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('auditFileAnalysis', analysisTree),
-    vscode.window.registerTreeDataProvider('auditSourceSink', sourceSinkTree),
+    sourceSinkView,
     vscode.window.registerTreeDataProvider('auditFindings', findingsTree),
     vscode.languages.registerCodeLensProvider({ scheme: 'file' }, markCodeLens),
     decorations,
@@ -85,11 +87,24 @@ export function activate(context: vscode.ExtensionContext): void {
     markDecorations.apply(editor, store.loadMarks().filter((m) => m.file === rel));
   };
 
+  /** If the active file has source/sink marks, reveal (select) its node in the Source/Sink view. */
+  const syncSourceSinkSelection = (editor: vscode.TextEditor | undefined) => {
+    if (!editor || editor.document.uri.scheme !== 'file' || !sourceSinkView.visible) {
+      return;
+    }
+    const node = sourceSinkTree.nodeForFile(relPathOf(editor.document.uri));
+    if (node) {
+      // focus:false so we don't steal focus from the editor
+      sourceSinkView.reveal(node, { select: true, focus: false, expand: true }).then(undefined, () => {});
+    }
+  };
+
   /** After mark data changes, refresh everything: view, CodeLens, current editor decorations */
   const refreshMarks = () => {
     sourceSinkTree.refresh();
     markCodeLens.refresh();
     showMarksFor(vscode.window.activeTextEditor);
+    syncSourceSinkSelection(vscode.window.activeTextEditor);
   };
 
   /** The command argument may be a mark id string, or a TreeView item (with markId) */
@@ -479,6 +494,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       showAnalysisFor(editor);
       showMarksFor(editor);
+      syncSourceSinkSelection(editor);
+    }),
+    // When the Source/Sink view becomes visible, sync it to the current editor
+    sourceSinkView.onDidChangeVisibility((e) => {
+      if (e.visible) {
+        syncSourceSinkSelection(vscode.window.activeTextEditor);
+      }
     }),
     vscode.workspace.onDidSaveTextDocument(async (doc) => {
       if (doc.uri.scheme === 'file' && isSupportedFile(doc.uri.fsPath)) {
@@ -494,6 +516,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   showAnalysisFor(vscode.window.activeTextEditor);
   showMarksFor(vscode.window.activeTextEditor);
+  syncSourceSinkSelection(vscode.window.activeTextEditor);
 }
 
 export function deactivate(): void {
